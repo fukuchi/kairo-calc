@@ -1,0 +1,688 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LED電流制限抵抗計算機</title>
+<meta name="description" content="LED の色・電源電圧・明るさから電流制限抵抗を求めます。手持ちの抵抗で流れる電流と明るさも確かめられます。">
+<style>:root{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+JP:wght@400;500;700&display=swap">
+<style>
+.back{font-size:.85rem}.back a{color:var(--muted);text-decoration:none}.back a:hover{color:var(--accent);text-decoration:underline}
+/* Layout: bench sheet — conditions on the left, a dark "light box" with the lit LED and the IF–Iv curve on the right */
+:root {
+  --bg: #eef1f4;
+  --panel: #ffffff;
+  --ink: #18202a;
+  --muted: #5b6673;
+  --line: #d3d9e0;
+  --accent: #1f5fbf;
+  --accent-soft: #e4ecf9;
+  --warn: #9a6100;
+  --warn-soft: #fbf0d9;
+  --danger: #b83224;
+  --danger-soft: #fbe6e3;
+  --stage: #0d1117;
+  --stage-ink: #c9d2dc;
+  --rbody: #e6cf9d;
+  --f-body: "IBM Plex Sans JP", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141a; --panel: #161d25; --ink: #e4e9ef; --muted: #95a2af; --line: #2b3541;
+    --accent: #79a8f2; --accent-soft: #1b2940; --warn: #f0b85a; --warn-soft: #33270f;
+    --danger: #ff8172; --danger-soft: #3a1c19; --stage: #07090c; --stage-ink: #c9d2dc; --rbody: #d6bd8a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141a; --panel: #161d25; --ink: #e4e9ef; --muted: #95a2af; --line: #2b3541;
+  --accent: #79a8f2; --accent-soft: #1b2940; --warn: #f0b85a; --warn-soft: #33270f;
+  --danger: #ff8172; --danger-soft: #3a1c19; --stage: #07090c; --stage-ink: #c9d2dc; --rbody: #d6bd8a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 48px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+header h1 { font-size: 1.6rem; font-weight: 700; margin: 0; letter-spacing: .01em; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 64ch; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 20px; align-items: start; }
+@media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.panel h2 { font-size: .8rem; font-weight: 600; letter-spacing: .08em; color: var(--muted); margin: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.fields.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 520px) { .fields.three { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+@media (max-width: 400px) { .fields, .fields.three { grid-template-columns: minmax(0, 1fr); } }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field label { font-size: .82rem; color: var(--muted); }
+.field label b { color: var(--ink); font-family: var(--f-mono); font-weight: 600; margin-right: 4px; }
+.inbox { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); }
+.inbox:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.inbox input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink); font: 500 1.05rem var(--f-mono); padding: 8px 10px; outline: none; font-variant-numeric: tabular-nums; }
+.inbox span { padding-right: 10px; color: var(--muted); font-family: var(--f-mono); }
+.inbox.bad { border-color: var(--danger); }
+select { font: 500 .95rem var(--f-body); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 7px 8px; }
+select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+.swatches label { display: flex; align-items: center; gap: 6px; padding: 5px 10px 5px 8px; border: 1px solid var(--line); border-radius: 999px; cursor: pointer; font-size: .88rem; }
+.swatches input { position: absolute; opacity: 0; pointer-events: none; }
+.swatches i { width: 12px; height: 12px; border-radius: 50%; display: block; box-shadow: 0 0 0 1px rgba(0,0,0,.25) inset; }
+.swatches label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); font-weight: 500; }
+.swatches label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.seg label { padding: 5px 10px; cursor: pointer; font-size: .85rem; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label:has(input:checked) { background: var(--accent); color: var(--panel); }
+.seg label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
+.msg { margin: 0; padding: 10px 12px; border-radius: 4px; font-size: .88rem; }
+.msg.err { background: var(--danger-soft); color: var(--danger); }
+.msg.warn { background: var(--warn-soft); color: var(--warn); }
+.hint { color: var(--muted); font-size: .85rem; margin: 0; }
+.erow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.erow .val { font: 600 1.6rem var(--f-mono); font-variant-numeric: tabular-nums; }
+.erow .val small { font: 400 .8rem var(--f-body); color: var(--muted); display: block; }
+.rbody { display: inline-flex; gap: 4px; align-items: stretch; height: 22px; padding: 0 9px; border-radius: 8px; background: var(--rbody); }
+.rbody i { width: 6px; display: block; }
+.rbody i.tol { margin-left: 7px; }
+.stage { background: var(--stage); border-radius: 6px; display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 16px; align-items: center; padding: 16px; color: var(--stage-ink); }
+@media (max-width: 420px) { .stage { grid-template-columns: 110px minmax(0, 1fr); } }
+.stage svg { width: 100%; height: auto; display: block; overflow: visible; }
+.stage .big { font: 600 2rem var(--f-mono); color: #ffffff; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.stage .lbl { font-size: .78rem; color: var(--stage-ink); opacity: .8; }
+.stage .sub { font: 500 .95rem var(--f-mono); color: #ffffff; }
+.stage-info { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 520px) { .stats { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.stat { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.stat .lbl { font-size: .78rem; color: var(--muted); }
+.stat .v { font: 600 1.05rem var(--f-mono); font-variant-numeric: tabular-nums; }
+.stat .v small { font: 400 .76rem var(--f-body); color: var(--muted); display: block; }
+.plot { width: 100%; height: auto; display: block; }
+.plot .axis { stroke: var(--muted); stroke-width: 1; fill: none; }
+.plot .gridl { stroke: var(--line); stroke-width: 1; fill: none; }
+.plot .curve { stroke: var(--accent); stroke-width: 2.4; fill: none; }
+.plot .over { fill: var(--danger-soft); }
+.plot .guide { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 4; fill: none; }
+.plot .ref { fill: var(--panel); stroke: var(--muted); stroke-width: 1.5; }
+.plot .op { fill: var(--accent); stroke: var(--panel); stroke-width: 2; }
+.plot text { font-family: var(--f-mono); font-size: 11.5px; fill: var(--muted); }
+.plot text.k { fill: var(--ink); font-weight: 600; }
+.plot text.d { fill: var(--danger); }
+.schem { width: 100%; max-width: 460px; height: auto; display: block; margin: 0 auto; }
+.schem .w { stroke: var(--ink); stroke-width: 2; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.schem .ledf { fill: var(--ink); stroke: var(--ink); stroke-width: 1.5; stroke-linejoin: round; }
+.schem .term { fill: var(--panel); stroke: var(--ink); stroke-width: 2; }
+.schem text { font-family: var(--f-mono); font-size: 13px; fill: var(--ink); }
+.schem text.m { fill: var(--muted); font-size: 12px; }
+.schem text.b { font-weight: 600; }
+.note { font-size: .82rem; color: var(--muted); margin: 0; }
+.dim { opacity: .4; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.hero { gap: 12px; }
+.quick { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: stretch; }
+@media (max-width: 860px) { .quick { grid-template-columns: minmax(0, 1fr); } }
+.q-inputs { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.q { display: flex; flex-direction: column; gap: 8px; }
+.q-lbl { font-weight: 600; font-size: .95rem; }
+.chiprow { display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chips button { font: 500 .9rem var(--f-body); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; cursor: pointer; display: flex; flex-direction: column; align-items: center; line-height: 1.25; }
+.chips button small { font: .74rem var(--f-mono); color: var(--muted); }
+.chips button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.chips button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.inbox.small { width: 7.5em; }
+.stage .ans-lines { display: flex; flex-direction: column; gap: 2px; font-size: .9rem; color: var(--stage-ink); margin-top: 8px; }
+.stage .ans-lines b { color: #ffffff; font-family: var(--f-mono); font-weight: 600; }
+.stage .big { font-size: 2.6rem; }
+.stage-err { margin: 0; color: #ffb4a8; font-size: .92rem; }
+.qmode { align-self: flex-start; flex-wrap: wrap; }
+.qmode label { padding: 7px 12px; font-size: .9rem; }
+.schem-wrap { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--line); padding-top: 12px; }
+.schem-wrap .schem { max-width: 380px; max-height: 120px; }
+.eqbox summary { cursor: pointer; color: var(--muted); font-size: .9rem; }
+.eqbox summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.eq { margin-top: 8px; display: flex; flex-direction: column; gap: 10px; font-size: .88rem; }
+.eq .f { font-family: var(--f-mono); line-height: 1.8; overflow-x: auto; white-space: nowrap; padding: 8px 12px; background: var(--bg); border-radius: 4px; font-variant-numeric: tabular-nums; }
+.eq .f b { color: var(--accent); font-weight: 600; }
+.eq p { margin: 0; color: var(--muted); }
+details.more { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+details.more > summary { cursor: pointer; padding: 14px 18px; font-weight: 600; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+details.more > summary span { font-weight: 400; font-size: .82rem; color: var(--muted); }
+details.more > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+details.more[open] > summary { border-bottom: 1px solid var(--line); }
+details.more > .grid { padding: 18px; }
+details.more .panel { border-color: var(--line); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="back"><a href="../">← 電子回路計算ツール一覧</a></nav>
+  <header>
+    <h1>LED電流制限抵抗計算機</h1>
+    <p>LED の色と電源電圧、明るさを選ぶと、LED と直列に入れる抵抗の値がわかります。手持ちの抵抗でどれだけ電流が流れるかも確かめられます。</p>
+  </header>
+
+  <section class="panel hero" aria-labelledby="h-quick">
+    <h2 id="h-quick" class="sr">かんたん計算</h2>
+    <div class="quick">
+      <div class="q-inputs">
+        <div class="q">
+          <span class="q-lbl">1. LED の色</span>
+          <div class="swatches" id="colors" role="radiogroup" aria-label="LED の色"></div>
+        </div>
+        <div class="q">
+          <label class="q-lbl" for="vs">2. 電源電圧</label>
+          <div class="chiprow">
+            <div class="chips" id="vs-chips" role="group" aria-label="よく使う電源電圧">
+              <button type="button" data-v="3.3">3.3 V</button>
+              <button type="button" data-v="5">5 V</button>
+              <button type="button" data-v="9">9 V</button>
+              <button type="button" data-v="12">12 V</button>
+            </div>
+            <div class="inbox small"><input id="vs" type="text" inputmode="decimal" value="5" autocomplete="off"><span>V</span></div>
+          </div>
+        </div>
+        <div class="q">
+          <div class="seg qmode" role="radiogroup" aria-label="計算のしかた">
+            <label><input type="radio" name="qmode" value="fwd" checked>明るさから抵抗を決める</label>
+            <label><input type="radio" name="qmode" value="rev">手持ちの抵抗で電流を確かめる</label>
+          </div>
+        </div>
+        <div class="q" id="q-fwd">
+          <label class="q-lbl" for="it">3. 明るさ（流す電流）</label>
+          <div class="chiprow">
+            <div class="chips" id="it-chips" role="group" aria-label="明るさの目安">
+              <button type="button" data-v="2">ひかえめ<small>2 mA</small></button>
+              <button type="button" data-v="5">ふつう<small>5 mA</small></button>
+              <button type="button" data-v="10">明るめ<small>10 mA</small></button>
+              <button type="button" data-v="20">最大<small>20 mA</small></button>
+            </div>
+            <div class="inbox small"><input id="it" type="text" inputmode="decimal" value="10" autocomplete="off"><span>mA</span></div>
+          </div>
+          <p class="hint">机の上の表示灯なら 2〜5 mA でも十分に光ります。迷ったら「明るめ」に。</p>
+        </div>
+        <div class="q" id="q-rev" hidden>
+          <label class="q-lbl" for="rin">3. 手持ちの抵抗</label>
+          <div class="chiprow">
+            <div class="chips" id="rin-chips" role="group" aria-label="よく使う抵抗値">
+              <button type="button" data-v="100">100 Ω</button>
+              <button type="button" data-v="220">220 Ω</button>
+              <button type="button" data-v="330">330 Ω</button>
+              <button type="button" data-v="470">470 Ω</button>
+              <button type="button" data-v="1000">1 kΩ</button>
+            </div>
+            <div class="inbox small"><input id="rin" type="text" value="330" autocomplete="off"><span>Ω</span></div>
+          </div>
+          <p class="hint">4.7k、4k7、1M のようにも入力できます。表示されるカラーコードを手持ちの抵抗の帯と見比べると、値を確かめられます。</p>
+        </div>
+      </div>
+
+      <div class="stage" aria-live="polite">
+        <svg id="ledsvg" viewBox="-60 -70 120 170" aria-hidden="true">
+          <defs>
+            <radialGradient id="glow">
+              <stop offset="0" id="g0" stop-color="#fff" stop-opacity="1"></stop>
+              <stop offset=".35" id="g1" stop-color="#fff" stop-opacity=".5"></stop>
+              <stop offset="1" id="g2" stop-color="#fff" stop-opacity="0"></stop>
+            </radialGradient>
+            <linearGradient id="lens" x1="0" x2="1">
+              <stop offset="0" stop-color="#fff" stop-opacity=".22"></stop>
+              <stop offset=".4" stop-color="#fff" stop-opacity="0"></stop>
+            </linearGradient>
+          </defs>
+          <circle id="halo" cx="0" cy="-12" r="60" fill="url(#glow)"></circle>
+          <rect x="-11" y="44" width="4" height="52" fill="#8b9198"></rect>
+          <rect x="7" y="44" width="4" height="44" fill="#8b9198"></rect>
+          <path id="body" d="M-22 40 V-14 A22 22 0 0 1 22 -14 V40 Z"></path>
+          <rect id="rim" x="-26" y="36" width="52" height="8" rx="2"></rect>
+          <path d="M-22 40 V-14 A22 22 0 0 1 22 -14 V40 Z" fill="url(#lens)"></path>
+          <circle id="core" cx="0" cy="-6" r="7" fill="#fff"></circle>
+        </svg>
+        <div class="stage-info">
+          <div id="ans">
+            <div class="lbl" id="ans-lbl">使う抵抗</div>
+            <div class="big" id="ans-r">—</div>
+            <div id="ans-bands"></div>
+            <div class="ans-lines">
+              <span id="ans-watt"></span>
+              <span id="ans-i"></span>
+              <span id="ans-rel"></span>
+            </div>
+          </div>
+          <p class="stage-err" id="err" role="alert" hidden></p>
+        </div>
+      </div>
+    </div>
+    <p class="msg warn" id="warn" hidden></p>
+    <div class="schem-wrap dimmable">
+      <span class="q-lbl" id="h-sc">回路図</span>
+      <svg class="schem" id="schem" viewBox="0 0 460 120" role="img" aria-label="電源から抵抗 R を通って LED を経て GND へ"></svg>
+      <details class="eqbox">
+        <summary>計算式</summary>
+        <div class="eq" id="eq"></div>
+      </details>
+    </div>
+  </section>
+
+  <details class="more" id="more">
+    <summary>詳しい設定と計算結果<span>VF・定格・直列数・丸め方、消費電力、特性グラフ</span></summary>
+    <div class="grid">
+      <div class="col">
+        <section class="panel" aria-labelledby="h-in">
+          <h2 id="h-in">LED の詳しい条件</h2>
+          <div class="fields three">
+            <div class="field">
+              <label for="vf"><b>VF</b>順方向電圧</label>
+              <div class="inbox"><input id="vf" type="text" inputmode="decimal" autocomplete="off"><span>V</span></div>
+            </div>
+            <div class="field">
+              <label for="iref"><b>IF</b>VF の測定条件</label>
+              <div class="inbox"><input id="iref" type="text" inputmode="decimal" autocomplete="off"><span>mA</span></div>
+            </div>
+            <div class="field">
+              <label for="imax"><b>IFmax</b>絶対最大定格</label>
+              <div class="inbox"><input id="imax" type="text" inputmode="decimal" autocomplete="off"><span>mA</span></div>
+            </div>
+          </div>
+          <div class="fields three">
+            <div class="field">
+              <label for="n"><b>n</b>直列の個数</label>
+              <div class="inbox"><input id="n" type="text" inputmode="numeric" value="1" autocomplete="off"><span>個</span></div>
+            </div>
+          </div>
+          <p class="hint">初期値は Φ5mm 砲弾型 LED の典型値です。データシートの値で上書きできます。色を選び直すと典型値に戻ります。</p>
+        </section>
+
+        <section class="panel dimmable" aria-labelledby="h-r">
+          <h2 id="h-r">抵抗値の丸め方
+            <span style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <select id="series" aria-label="E系列">
+                <option value="none">丸めない</option>
+                <option value="E6">E6</option>
+                <option value="E12">E12</option>
+                <option value="E24" selected>E24</option>
+                <option value="E96">E96</option>
+              </select>
+              <span class="seg" role="radiogroup" aria-label="丸める方向">
+                <label><input type="radio" name="dir" value="up" checked>大きい側</label>
+                <label><input type="radio" name="dir" value="near">最寄り</label>
+              </span>
+            </span>
+          </h2>
+          <div class="erow">
+            <span class="val" id="rsel">—<small id="rsel-sub"></small></span>
+            <span id="bands"></span>
+          </div>
+          <div class="stats">
+            <div class="stat"><span class="lbl">実際の電流</span><span class="v" id="st-i">—</span></div>
+            <div class="stat"><span class="lbl">抵抗の消費電力</span><span class="v" id="st-pr">—</span></div>
+            <div class="stat"><span class="lbl">LED の消費電力</span><span class="v" id="st-pl">—</span></div>
+          </div>
+          <p class="hint" id="dir-hint"></p>
+        </section>
+
+      </div>
+
+      <div class="col">
+        <section class="panel dimmable" aria-labelledby="h-led">
+          <h2 id="h-led">電流と明るさの関係</h2>
+          <div class="stats">
+            <div class="stat"><span class="lbl">相対光度</span><span class="v" id="rel">—</span></div>
+            <div class="stat"><span class="lbl">見た目の明るさの目安</span><span class="v" id="perc">—</span></div>
+            <div class="stat"><span class="lbl">動作点</span><span class="v" id="opp">—</span></div>
+          </div>
+          <svg class="plot" id="plot" viewBox="0 0 440 240" role="img" aria-label="順方向電流と相対光度の関係のグラフ"></svg>
+          <p class="note">相対光度は VF の測定条件の電流（ふつうは 20 mA）で 100% とした値で、典型的なデータシートにある「順方向電流と相対光度」の曲線を近似しています。青・白・緑（InGaN）は電流を増やすほど効率が落ち、赤・黄（AlGaInP）はほぼ電流に比例します。人の目には光度の比ほど明るさの差が感じられないため、見た目の明るさは光度の平方根で近似しています。</p>
+        </section>
+      </div>
+    </div>
+  </details>
+</div>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  // typical Φ5mm datasheet values. m: log slope of VF [V], rs: series resistance [Ω], g: Iv ∝ IF^g
+  const LEDS = [
+    { id: "red",    name: "赤",   chip: "AlGaInP", color: "#ff2a1a", vf: 2.0, iref: 20, imax: 30, m: 0.05, rs: 10, g: 1.0 },
+    { id: "orange", name: "橙",   chip: "AlGaInP", color: "#ff7a12", vf: 2.0, iref: 20, imax: 30, m: 0.05, rs: 10, g: 1.0 },
+    { id: "yellow", name: "黄",   chip: "AlGaInP", color: "#ffc61a", vf: 2.1, iref: 20, imax: 30, m: 0.05, rs: 10, g: 1.0 },
+    { id: "ygreen", name: "黄緑", chip: "GaP",     color: "#a4e01c", vf: 2.1, iref: 20, imax: 30, m: 0.06, rs: 12, g: 1.1 },
+    { id: "green",  name: "緑",   chip: "InGaN",   color: "#1fe36a", vf: 3.2, iref: 20, imax: 30, m: 0.10, rs: 12, g: 0.8 },
+    { id: "blue",   name: "青",   chip: "InGaN",   color: "#3a6dff", vf: 3.2, iref: 20, imax: 30, m: 0.09, rs: 12, g: 0.85 },
+    { id: "white",  name: "白",   chip: "InGaN",   color: "#f4f1ff", vf: 3.1, iref: 20, imax: 30, m: 0.09, rs: 12, g: 0.85 }
+  ];
+  const SERIES = {
+    E6: [10, 15, 22, 33, 47, 68],
+    E12: [10, 12, 15, 18, 22, 27, 33, 39, 47, 56, 68, 82],
+    E24: [10, 11, 12, 13, 15, 16, 18, 20, 22, 24, 27, 30, 33, 36, 39, 43, 47, 51, 56, 62, 68, 75, 82, 91],
+    E96: [100,102,105,107,110,113,115,118,121,124,127,130,133,137,140,143,147,150,154,158,162,165,169,174,178,182,187,191,196,200,205,210,215,221,226,232,237,243,249,255,261,267,274,280,287,294,301,309,316,324,332,340,348,357,365,374,383,392,402,412,422,432,442,453,464,475,487,499,511,523,536,549,562,576,590,604,619,634,649,665,681,698,715,732,750,768,787,806,825,845,866,887,909,931,953,976]
+  };
+  const TOL = { E6: null, E12: "silver", E24: "gold", E96: "brown" };
+  const BAND = ["#111111", "#7a4a1f", "#d0302a", "#ee7d1d", "#f2d21b", "#2f9e44", "#2d62d6", "#7d3fc4", "#8a8f96", "#f4f4f4"];
+  const GOLD = "#c9a227", SILVER = "#b9bec5";
+  const RATINGS = [[0.125, "1/8 W"], [1 / 6, "1/6 W"], [0.25, "1/4 W"], [0.5, "1/2 W"], [1, "1 W"], [2, "2 W"], [3, "3 W"], [5, "5 W"]];
+  const IDS = ["vf", "iref", "imax", "vs", "it", "n", "rin"];
+  const qmode = () => document.querySelector('input[name="qmode"]:checked').value;
+  function parseR(str) {
+    let t = String(str).trim().replace(/[,\s]/g, "").replace(/(Ω|ohms?)$/i, "");
+    let m = t.match(/^([0-9]*\.?[0-9]+)([rRkKM]?)$/);
+    const mult = { "": 1, r: 1, R: 1, k: 1e3, K: 1e3, M: 1e6 };
+    if (m) return parseFloat(m[1]) * mult[m[2]];
+    m = t.match(/^([0-9]+)([rRkKM])([0-9]+)$/);
+    if (m) return parseFloat(m[1] + "." + m[3]) * mult[m[2]];
+    return NaN;
+  }
+
+  let led = LEDS[0];
+  let state = null;
+
+  const parse = (s) => { const t = String(s).trim().replace(/[,\s]/g, "").replace(/(V|mA|A|個)$/i, ""); return t === "" ? NaN : Number(t); };
+  function num(x, sig) { if (x === 0) return "0"; return String(Number(x.toPrecision(sig || 4))); }
+  function rStr(v, sig) {
+    if (v >= 1e6) return num(v / 1e6, sig) + " M";
+    if (v >= 1e3) return num(v / 1e3, sig) + " k";
+    return num(v, sig) + " ";
+  }
+  const rDisp = (v, sig) => rStr(v, sig) + "Ω";
+  function iDisp(a) { if (a < 1e-3) return num(a * 1e6, 3) + " µA"; return num(a * 1e3, 3) + " mA"; }
+  function pDisp(w) { if (w < 1e-3) return num(w * 1e6, 3) + " µW"; if (w < 1) return num(w * 1e3, 3) + " mW"; return num(w, 3) + " W"; }
+
+  // LED model
+  const vfAt = (I, p) => p.vf + p.m * Math.log(Math.max(I, 1e-9) / p.iref) + p.rs * (I - p.iref);
+  const relAt = (I, p) => Math.pow(Math.max(I, 0) / p.iref, p.g);
+  function solveI(vs, n, R, p) {
+    const g = (I) => vs - n * vfAt(I, p) - I * R;
+    let lo = 1e-9, hi = vs / R;
+    if (g(lo) <= 0) return 0;
+    for (let k = 0; k < 100; k++) { const mid = Math.sqrt(lo * hi); if (g(mid) > 0) lo = mid; else hi = mid; }
+    return (lo + hi) / 2;
+  }
+
+  function pick(v, ser, dir) {
+    if (ser === "none") return v;
+    const list = SERIES[ser], base = ser === "E96" ? 100 : 10, d = Math.floor(Math.log10(v));
+    let lo = 0, hi = Infinity;
+    for (let k = d - 2; k <= d + 1; k++) for (const m of list) {
+      const c = Number((m / base * Math.pow(10, k)).toPrecision(4));
+      if (c <= v * (1 + 1e-9) && c > lo) lo = c;
+      if (c >= v * (1 - 1e-9) && c < hi) hi = c;
+    }
+    if (dir === "up" || !lo) return hi;
+    return Math.log(v / lo) < Math.log(hi / v) ? lo : hi;
+  }
+  function bands(v, s) {
+    if (s === "none") return "";
+    const digits = s === "E96" ? 3 : 2;
+    const e = Math.floor(Math.log10(v) + 1e-9) - (digits - 1);
+    const sig = Math.round(v / Math.pow(10, e));
+    const ds = String(sig).padStart(digits, "0").split("").map(Number);
+    const multColor = e === -1 ? GOLD : e === -2 ? SILVER : BAND[e] || "#111111";
+    const tol = TOL[s];
+    let html = `<span class="rbody" title="カラーコード" aria-label="カラーコード">`;
+    html += ds.map((d) => `<i style="background:${BAND[d]}"></i>`).join("");
+    html += `<i style="background:${multColor}"></i>`;
+    if (tol) html += `<i class="tol" style="background:${tol === "gold" ? GOLD : tol === "silver" ? SILVER : BAND[1]}"></i>`;
+    return html + "</span>";
+  }
+
+  // color swatches
+  $("colors").innerHTML = LEDS.map((l, i) =>
+    `<label><input type="radio" name="led" value="${l.id}" ${i === 0 ? "checked" : ""}><i style="background:${l.color}"></i>${l.name}</label>`).join("");
+  function applyPreset() {
+    led = LEDS.find((l) => l.id === document.querySelector('input[name="led"]:checked').value);
+    $("vf").value = led.vf; $("iref").value = led.iref; $("imax").value = led.imax;
+  }
+
+  function mark(id, bad) { $(id).parentElement.classList.toggle("bad", !!bad); }
+  function fail(msg, ids) {
+    IDS.forEach((i) => mark(i, ids.includes(i)));
+    $("err").textContent = msg; $("err").hidden = false; $("warn").hidden = true;
+    $("ans").hidden = true;
+    drawLed(0);
+    if (ids.some((i) => ["vf", "iref", "imax", "n"].includes(i))) $("more").open = true;
+    state = null;
+    document.querySelectorAll(".dimmable").forEach((e) => e.classList.add("dim"));
+  }
+
+  function recalc() {
+    const vf = parse($("vf").value), irefmA = parse($("iref").value), imaxmA = parse($("imax").value);
+    const vs = parse($("vs").value), itmA = parse($("it").value), n = parse($("n").value);
+    if (!(vf > 0)) return fail("VF には 0 より大きい数値を入れてください。", ["vf"]);
+    if (!(irefmA > 0)) return fail("VF の測定条件の電流を入れてください（例: 20）。", ["iref"]);
+    if (!(imaxmA > 0)) return fail("絶対最大定格の電流を入れてください（例: 30）。", ["imax"]);
+    if (!(vs > 0)) return fail("電源電圧には 0 より大きい数値を入れてください。", ["vs"]);
+    const rev = qmode() === "rev";
+    const rin = parseR($("rin").value);
+    if (!rev && !(itmA > 0)) return fail("流したい電流には 0 より大きい数値を入れてください。", ["it"]);
+    if (rev && !(rin > 0)) return fail("抵抗値には 0 より大きい値を入れてください（例: 330、4.7k）。", ["rin"]);
+    if (!(n >= 1) || !Number.isInteger(n)) return fail("直列の個数は 1 以上の整数にしてください。", ["n"]);
+    const p = Object.assign({}, led, { vf, iref: irefmA / 1e3 });
+    const imax = imaxmA / 1e3;
+    if (rev) return recalcRev(p, vs, n, rin, imax, imaxmA);
+    const it = itmA / 1e3;
+    const vfOp = vfAt(it, p);
+    const head = vs - n * vfOp;
+    if (head <= 0) {
+      const maxN = Math.floor(vs / vfOp);
+      return fail(`電源電圧が足りません。${n} 個直列では ${num(n * vfOp, 3)} V 必要です（この電流での VF ${num(vfOp, 3)} V × ${n}）。` +
+        (maxN >= 1 ? `この電源で直列にできるのは ${maxN} 個までです。` : "電源電圧を上げてください。"), ["vs", "n"]);
+    }
+    IDS.forEach((i) => mark(i, false));
+    $("err").hidden = true;
+    $("ans").hidden = false;
+    document.querySelectorAll(".dimmable").forEach((e) => e.classList.remove("dim"));
+
+    const rIdeal = head / it;
+    const ser = $("series").value, dir = document.querySelector('input[name="dir"]:checked').value;
+    const R = pick(rIdeal, ser, dir);
+    const I = solveI(vs, n, R, p);
+    state = { rev: false, p, vs, n, it, imax, vfOp, rIdeal, R, I, ser, dir };
+
+    const warns = [];
+    if (I > imax) warns.push(`実際の電流 ${iDisp(I)} が絶対最大定格 ${num(imaxmA)} mA を超えています。抵抗を大きくしてください。`);
+    else if (it > imax) warns.push(`流したい電流が絶対最大定格 ${num(imaxmA)} mA を超えています。`);
+    if (head / vs < 0.2) warns.push(`抵抗にかかる電圧が ${num(head, 3)} V しかありません。VF の個体差や電源電圧の変動で電流が大きく変わるので、電源電圧に余裕を持たせるか、定電流回路を検討してください。`);
+    $("warn").textContent = warns.join(" ");
+    $("warn").hidden = warns.length === 0;
+    render();
+  }
+
+  function recalcRev(p, vs, n, R, imax, imaxmA) {
+    const I = solveI(vs, n, R, p);
+    if (I < 1e-5) return fail(`この電源電圧では LED がほとんど光りません。${n} 個直列の LED には少なくとも約 ${num(n * vfAt(1e-4, p), 3)} V 必要です。`, ["vs", "n"]);
+    IDS.forEach((i) => mark(i, false));
+    $("err").hidden = true;
+    $("ans").hidden = false;
+    document.querySelectorAll(".dimmable").forEach((e) => e.classList.remove("dim"));
+    state = { rev: true, p, vs, n, it: I, imax, vfOp: vfAt(I, p), rIdeal: R, R, I, ser: "none", dir: "up" };
+    const head = vs - n * vfAt(I, p);
+    const warns = [];
+    if (I > imax) warns.push(`流れる電流 ${iDisp(I)} が絶対最大定格 ${num(imaxmA)} mA を超えています。この抵抗では LED が壊れるおそれがあるので、もっと大きい抵抗を使ってください。`);
+    else if (I > p.iref * 1.05) warns.push(`流れる電流 ${iDisp(I)} が、データシートの標準の電流（${num(p.iref * 1e3)} mA）を超えています。点きはしますが、寿命が短くなったり熱くなったりするので、少し大きい抵抗にすると安心です。`);
+    if (head / vs < 0.2) warns.push(`抵抗にかかる電圧が ${num(head, 3)} V しかありません。VF の個体差や電源電圧の変動で電流が大きく変わります。`);
+    $("warn").textContent = warns.join(" ");
+    $("warn").hidden = warns.length === 0;
+    render();
+  }
+
+  // color bands for any value: 2 significant digits if possible, otherwise 3
+  function bandsAuto(v) { return bands(v, Number(v.toPrecision(2)) === v ? "E24" : "E96"); }
+
+  function render() {
+    const s = state;
+    // resistor
+    $("rsel").firstChild.nodeValue = rDisp(s.R, s.ser === "none" ? 4 : 3);
+    $("rsel-sub").textContent = s.rev ? "手持ちの抵抗（丸めは使いません）" : s.ser === "none" ? "計算値" : `計算値 ${rDisp(s.rIdeal)} → ${s.ser}（${s.dir === "up" ? "大きい側" : "最寄り"}）`;
+    $("bands").innerHTML = s.rev ? bandsAuto(s.R) : bands(s.R, s.ser);
+    const dev = (s.I - s.it) / s.it * 100;
+    $("st-i").innerHTML = s.rev ? `${iDisp(s.I)}<small>手持ちの抵抗で流れる電流</small>`
+      : `${iDisp(s.I)}<small>目標 ${iDisp(s.it)} に対し ${dev >= 0 ? "+" : "−"}${num(Math.abs(dev), 2)}%</small>`;
+    const pr = s.I * s.I * s.R;
+    const rating = RATINGS.find(([w]) => pr <= w * 0.5) || RATINGS[RATINGS.length - 1];
+    $("st-pr").innerHTML = `${pDisp(pr)}<small>${rating[1]} 以上の抵抗を推奨</small>`;
+    if (s.rev) {
+      $("ans-lbl").textContent = "流れる電流";
+      $("ans-r").textContent = iDisp(s.I);
+      $("ans-bands").innerHTML = bandsAuto(s.R);
+    } else {
+      $("ans-r").textContent = rDisp(s.R, s.ser === "none" ? 4 : 3);
+      $("ans-lbl").textContent = s.ser === "none" ? "使う抵抗（計算値）" : `使う抵抗（市販の ${s.ser} 系列の値）`;
+      $("ans-bands").innerHTML = bands(s.R, s.ser);
+    }
+    $("ans-watt").innerHTML = rating[0] <= 0.25
+      ? "ふつうの <b>1/4 W</b> 抵抗で大丈夫です"
+      : `<b>${rating[1]}</b> 以上の抵抗を使ってください（発熱します）`;
+    $("ans-i").innerHTML = s.rev ? `抵抗 <b>${rDisp(s.R)}</b> のとき` : `電流 <b>${iDisp(s.I)}</b>`;
+    const vfReal = vfAt(s.I, s.p);
+    $("st-pl").innerHTML = `${pDisp(s.n * vfReal * s.I)}<small>VF ${num(vfReal, 3)} V × ${s.n} 個</small>`;
+    $("dir-hint").textContent = s.rev ? "手持ちの抵抗から電流を計算しているので、E系列への丸めは使いません。" : s.ser === "none"
+      ? "E系列を選ぶと、市販の抵抗値に丸めた場合の電流と明るさを計算します。"
+      : s.dir === "up"
+        ? "大きい側に丸めているので、電流は目標以下になります。"
+        : "最寄りの値に丸めています。電流が目標を少し超えることがあります。";
+
+    // brightness
+    const rel = relAt(s.I, s.p);
+    const perc = Math.sqrt(rel);
+    $("rel").textContent = num(rel * 100, 3) + " %";
+    $("ans-rel").innerHTML = `明るさ <b>${num(rel * 100, 2)}%</b>（${num(s.p.iref * 1e3)} mA のときを 100% として）`;
+    $("perc").textContent = `約 ${num(perc * 100, 2)} %`;
+    $("opp").textContent = `${iDisp(s.I)} / VF ${num(vfReal, 3)} V`;
+    drawLed(Math.min(perc, 1.4));
+    drawPlot(s, rel);
+    drawSchem(s);
+    renderEq(s, vfReal, pr);
+  }
+
+  function renderEq(s, vfReal, pr) {
+    const v = (x) => num(x, 4);
+    const mA = (a) => num(a * 1e3, 3);
+    const nn = s.n > 1 ? `${s.n} × ` : "";
+    const nnS = s.n > 1 ? `n × ` : "";
+    let h = "";
+    if (!s.rev) {
+      h += `<div><p>抵抗値（オームの法則。抵抗にかかる電圧 ÷ 流したい電流）</p><div class="f">R = (VS − ${nnS}VF) ÷ I<br>&nbsp;&nbsp;= (${v(s.vs)} − ${nn}${v(s.vfOp)}) ÷ ${num(s.it, 3)} A = <b>${rDisp(s.rIdeal)}</b>` +
+        (s.ser === "none" ? "" : `<br>&nbsp;&nbsp;→ ${s.ser} の${s.dir === "up" ? "大きい側" : "最寄り"}の値 <b>${rDisp(s.R, 3)}</b>`) + `</div></div>`;
+      h += `<div><p>丸めた抵抗で実際に流れる電流</p><div class="f">I = (VS − ${nnS}VF) ÷ R<br>&nbsp;&nbsp;= (${v(s.vs)} − ${nn}${v(vfReal)}) ÷ ${rDisp(s.R, 3)} = <b>${iDisp(s.I)}</b></div></div>`;
+    } else {
+      h += `<div><p>流れる電流（オームの法則。抵抗にかかる電圧 ÷ 抵抗値）</p><div class="f">I = (VS − ${nnS}VF) ÷ R<br>&nbsp;&nbsp;= (${v(s.vs)} − ${nn}${v(vfReal)}) ÷ ${rDisp(s.R)} = <b>${iDisp(s.I)}</b></div></div>`;
+    }
+    h += `<div><p>明るさ（相対光度）</p><div class="f">明るさ ≈ (I ÷ ${num(s.p.iref * 1e3)} mA)<sup>${s.p.g}</sup> = <b>${num(relAt(s.I, s.p) * 100, 3)} %</b></div></div>`;
+    h += `<p>計算では電流を A（アンペア）で使います。10 mA = 0.01 A です。</p>`;
+    h += `<p>VF は電流によって少し変わるので、データシートの値（${num(s.p.vf, 3)} V @ ${num(s.p.iref * 1e3)} mA）をその電流での値に補正して使っています（今の電流で約 ${num(vfReal, 3)} V）。指数 ${s.p.g} は「電流と相対光度」の曲線の近似値です。</p>`;
+    $("eq").innerHTML = h;
+  }
+
+  function mix(hex, k, base) { // blend color toward base (0..1)
+    const a = parseInt(hex.slice(1), 16), b = parseInt(base.slice(1), 16);
+    const c = [16, 8, 0].map((sh) => Math.round(((a >> sh) & 255) * k + ((b >> sh) & 255) * (1 - k)));
+    return "#" + c.map((x) => x.toString(16).padStart(2, "0")).join("");
+  }
+  function drawLed(b) {
+    const c = led.color;
+    const lit = Math.min(b, 1);
+    $("body").setAttribute("fill", mix(c, 0.25 + 0.75 * lit, "#1a1d22"));
+    $("body").setAttribute("fill-opacity", 0.75 + 0.25 * lit);
+    $("rim").setAttribute("fill", mix(c, 0.2 + 0.6 * lit, "#1a1d22"));
+    for (const id of ["g0", "g1", "g2"]) $(id).setAttribute("stop-color", c);
+    $("g0").setAttribute("stop-opacity", Math.min(1, lit * 1.1));
+    $("g1").setAttribute("stop-opacity", lit * 0.45);
+    $("halo").setAttribute("r", 30 + 34 * b);
+    $("core").setAttribute("opacity", Math.max(0, Math.min(1, (b - 0.35) * 1.4)));
+    $("core").setAttribute("r", 4 + 5 * Math.min(b, 1.3));
+  }
+
+  function drawPlot(s, relOp) {
+    const W = 440, H = 240, L = 46, R = 16, T = 16, B = 38;
+    const imaxmA = s.imax * 1e3;
+    const xMax = Math.max(imaxmA * 1.34, s.I * 1e3 * 1.15, s.p.iref * 1e3 * 1.3);
+    const yMax = Math.max(relAt(xMax / 1e3, s.p), relOp) * 1.08;
+    const X = (mA) => L + mA / xMax * (W - L - R);
+    const Y = (r) => H - B - r / yMax * (H - B - T);
+    const niceStep = (span, target) => { const raw = span / target, p = Math.pow(10, Math.floor(Math.log10(raw))); return [1, 2, 5, 10].map((k) => k * p).find((k) => k >= raw); };
+    let g = "";
+    g += `<rect class="over" x="${X(imaxmA)}" y="${T}" width="${X(xMax) - X(imaxmA)}" height="${H - B - T}"></rect>`;
+    const xs = niceStep(xMax, 5), ys = niceStep(yMax * 100, 5);
+    for (let v = 0; v <= xMax + 1e-9; v += xs) {
+      g += `<path class="gridl" d="M${X(v)} ${T} V${H - B}"></path><text x="${X(v)}" y="${H - B + 16}" text-anchor="middle">${num(v, 3)}</text>`;
+    }
+    for (let v = 0; v <= yMax * 100 + 1e-9; v += ys) {
+      g += `<path class="gridl" d="M${L} ${Y(v / 100)} H${W - R}"></path><text x="${L - 6}" y="${Y(v / 100) + 4}" text-anchor="end">${num(v, 3)}</text>`;
+    }
+    g += `<path class="axis" d="M${L} ${T} V${H - B} H${W - R}"></path>`;
+    let d = "";
+    for (let k = 0; k <= 120; k++) { const mA = xMax * k / 120; d += (k ? " L" : "M") + X(mA).toFixed(1) + " " + Y(relAt(mA / 1e3, s.p)).toFixed(1); }
+    g += `<path class="curve" d="${d}"></path>`;
+    g += `<text x="${X(imaxmA) + 4}" y="${T + 12}" class="d">定格超え</text>`;
+    const refmA = s.p.iref * 1e3;
+    g += `<circle class="ref" cx="${X(refmA)}" cy="${Y(1)}" r="4"></circle>`;
+    const ox = X(s.I * 1e3), oy = Y(relOp);
+    g += `<path class="guide" d="M${ox} ${H - B} V${oy} H${L}"></path>`;
+    g += `<circle class="op" cx="${ox}" cy="${oy}" r="6"></circle>`;
+    const right = ox < W - 150;
+    g += `<text x="${ox + (right ? 10 : -10)}" y="${oy - 10}" text-anchor="${right ? "start" : "end"}" class="k">${num(s.I * 1e3, 3)} mA → ${num(relOp * 100, 3)}%</text>`;
+    g += `<text x="${W - R}" y="${H - 4}" text-anchor="end">順方向電流 IF [mA]</text>`;
+    g += `<text x="${L - 6}" y="${T - 4}" text-anchor="end" dy="0">%</text>`;
+    $("plot").innerHTML = g;
+  }
+
+  function drawSchem(s) {
+    // Vs ─ R ─ LED×n ─ GND, LEDs drawn up to 3 with an ellipsis for more
+    const y = 60;
+    const show = Math.min(s.n, 3);
+    let g = `<circle class="term" cx="20" cy="${y}" r="5"></circle><text x="20" y="${y - 14}" text-anchor="middle" class="b">${num(s.vs)} V</text>`;
+    g += `<path class="w" d="M25 ${y} H60"></path>`;
+    let zz = `M60 ${y} H66`, x = 66;
+    for (let i = 0; i < 6; i++) { x += 10; zz += ` L${x - 5} ${y + (i % 2 ? 8 : -8)} L${x} ${y}`; }
+    g += `<path class="w" d="${zz} H136"></path>`;
+    g += `<text x="98" y="${y - 16}" text-anchor="middle" class="b">R</text><text x="98" y="${y + 28}" text-anchor="middle" class="m">${rDisp(s.R, 3)}</text>`;
+    x = 136;
+    for (let i = 0; i < show; i++) {
+      const x0 = x + 18;
+      g += `<path class="w" d="M${x} ${y} H${x0}"></path>`;
+      g += `<path class="ledf" d="M${x0} ${y - 11} L${x0 + 20} ${y} L${x0} ${y + 11} Z"></path>`;
+      g += `<path class="w" d="M${x0 + 20} ${y - 11} V${y + 11}"></path>`;
+      g += `<path class="w" d="M${x0 + 12} ${y - 14} l7 -8 M${x0 + 18} ${y - 12} l7 -8"></path>`;
+      x = x0 + 20;
+      if (i === 1 && s.n > 3) { g += `<path class="w" d="M${x} ${y} H${x + 12}"></path><text x="${x + 24}" y="${y + 4}" text-anchor="middle" class="m">…</text>`; x += 36; }
+    }
+    g += `<text x="${(136 + x) / 2 + 9}" y="${y + 32}" text-anchor="middle" class="m">LED × ${s.n}</text>`;
+    g += `<path class="w" d="M${x} ${y} H${x + 30} V${y + 22} M${x + 18} ${y + 22} H${x + 42} M${x + 23} ${y + 28} H${x + 37} M${x + 28} ${y + 34} H${x + 32}"></path>`;
+    $("schem").setAttribute("viewBox", `0 0 ${Math.max(x + 60, 300)} 110`);
+    $("schem").innerHTML = g;
+  }
+
+  document.querySelectorAll('input[name="led"]').forEach((r) => r.addEventListener("change", () => { applyPreset(); recalc(); }));
+  document.querySelectorAll('input[name="dir"]').forEach((r) => r.addEventListener("change", recalc));
+  document.querySelectorAll('input[name="qmode"]').forEach((r) => r.addEventListener("change", () => {
+    const rev = qmode() === "rev";
+    if (rev && state && !state.rev) { $("rin").value = rStr(state.R, 3).trim().replace(" ", ""); syncChips(); }
+    $("q-fwd").hidden = rev; $("q-rev").hidden = !rev;
+    recalc();
+  }));
+  function syncChips() {
+    for (const [id, box] of [["vs", "vs-chips"], ["it", "it-chips"], ["rin", "rin-chips"]]) {
+      const v = id === "rin" ? parseR($(id).value) : parse($(id).value);
+      $(box).querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.v) === v)));
+    }
+  }
+  for (const [id, box] of [["vs", "vs-chips"], ["it", "it-chips"], ["rin", "rin-chips"]]) {
+    $(box).querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { $(id).value = b.dataset.v; syncChips(); recalc(); }));
+  }
+  IDS.forEach((id) => $(id).addEventListener("input", () => { syncChips(); recalc(); }));
+  $("series").addEventListener("change", recalc);
+  applyPreset();
+  syncChips();
+  recalc();
+})();
+</script>
+</body>
+</html>

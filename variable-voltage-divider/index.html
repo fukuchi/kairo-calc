@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>可変抵抗分圧計算機</title>
+<meta name="description" content="電源電圧・可変抵抗・欲しい電圧範囲から上下の固定抵抗を求め、固定抵抗から電圧範囲を逆算します。">
+<style>:root{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+JP:wght@400;500;700&display=swap">
+<style>
+.back{font-size:.85rem}.back a{color:var(--muted);text-decoration:none}.back a:hover{color:var(--accent);text-decoration:underline}
+/* Layout: bench sheet — inputs on the left, live schematic + readouts on the right; stacks on phones */
+:root {
+  --bg: #eef1f4;
+  --panel: #ffffff;
+  --ink: #18202a;
+  --muted: #5b6673;
+  --line: #d3d9e0;
+  --accent: #1f5fbf;
+  --accent-soft: #e4ecf9;
+  --wiper: #c46f1c;
+  --wiper-soft: #fbeedd;
+  --danger: #b83224;
+  --danger-soft: #fbe6e3;
+  --rbody: #e6cf9d;
+  --f-body: "IBM Plex Sans JP", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141a; --panel: #161d25; --ink: #e4e9ef; --muted: #95a2af; --line: #2b3541;
+    --accent: #79a8f2; --accent-soft: #1b2940; --wiper: #f0a252; --wiper-soft: #3a2a17;
+    --danger: #ff8172; --danger-soft: #3a1c19; --rbody: #d6bd8a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141a; --panel: #161d25; --ink: #e4e9ef; --muted: #95a2af; --line: #2b3541;
+  --accent: #79a8f2; --accent-soft: #1b2940; --wiper: #f0a252; --wiper-soft: #3a2a17;
+  --danger: #ff8172; --danger-soft: #3a1c19; --rbody: #d6bd8a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 48px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+header h1 { font-size: 1.6rem; font-weight: 700; margin: 0; letter-spacing: .01em; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 62ch; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 20px; align-items: start; }
+@media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.panel h2 { font-size: .8rem; font-weight: 600; letter-spacing: .08em; color: var(--muted); margin: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.group { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 6px; transition: background .2s, border-color .2s; }
+.group.computed { background: var(--accent-soft); border-color: transparent; }
+.group-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 500; }
+.tag { font-size: .72rem; font-weight: 600; letter-spacing: .06em; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.group.computed .tag { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 420px) { .fields { grid-template-columns: minmax(0, 1fr); } }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field label { font-size: .82rem; color: var(--muted); }
+.field label b { color: var(--ink); font-family: var(--f-mono); font-weight: 600; margin-right: 4px; }
+.inbox { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); }
+.inbox:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.inbox input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink); font: 500 1.05rem var(--f-mono); padding: 8px 10px; outline: none; font-variant-numeric: tabular-nums; }
+.inbox span { padding-right: 10px; color: var(--muted); font-family: var(--f-mono); }
+.inbox.bad { border-color: var(--danger); }
+.swap { text-align: center; font-size: .8rem; color: var(--muted); }
+.err { margin: 0; padding: 10px 12px; border-radius: 4px; background: var(--danger-soft); color: var(--danger); font-size: .88rem; }
+select { font: 500 .95rem var(--f-body); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; }
+select:focus-visible, button:focus-visible, input[type=range]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.erow { display: grid; grid-template-columns: 2.4em minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.erow .nm { font: 600 .95rem var(--f-mono); }
+.erow .val { font: 600 1.15rem var(--f-mono); font-variant-numeric: tabular-nums; }
+.erow .val small { font: 400 .78rem var(--f-body); color: var(--muted); display: block; }
+.rbody { display: inline-flex; gap: 3px; align-items: stretch; height: 18px; padding: 0 7px; border-radius: 7px; background: var(--rbody); }
+.rbody i { width: 5px; display: block; }
+.rbody i.tol { margin-left: 6px; }
+.short { font-size: .78rem; color: var(--muted); }
+.actual { font-family: var(--f-mono); font-size: .92rem; padding-top: 10px; border-top: 1px dashed var(--line); display: flex; flex-direction: column; gap: 2px; }
+.actual .lbl { font-family: var(--f-body); color: var(--muted); font-size: .8rem; }
+.btn { font: 500 .92rem var(--f-body); border: 1px solid var(--accent); background: var(--accent); color: var(--panel); border-radius: 4px; padding: 8px 14px; cursor: pointer; align-self: flex-start; }
+.btn:hover { filter: brightness(1.08); }
+.btn:disabled { opacity: .45; cursor: default; filter: none; }
+.hint { color: var(--muted); font-size: .85rem; margin: 0; }
+.schem { width: 100%; max-width: 420px; margin: 0 auto; display: block; height: auto; }
+.schem .w { stroke: var(--ink); stroke-width: 2; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.schem .vr { stroke: var(--accent); stroke-width: 2.2; fill: none; stroke-linejoin: round; }
+.schem .wp { stroke: var(--wiper); stroke-width: 2; fill: none; }
+.schem .wpf { fill: var(--wiper); }
+.schem .dot { fill: var(--ink); }
+.schem .term { fill: var(--panel); stroke: var(--ink); stroke-width: 2; }
+.schem .termw { fill: var(--panel); stroke: var(--wiper); stroke-width: 2; }
+.schem text { font-family: var(--f-mono); font-size: 13px; fill: var(--ink); }
+.schem text.m { fill: var(--muted); font-size: 12px; }
+.schem text.b { font-weight: 600; }
+.schem text.acc { fill: var(--accent); }
+.schem text.wt { fill: var(--wiper); font-weight: 600; }
+.bar { position: relative; height: 26px; border-radius: 4px; background: var(--bg); border: 1px solid var(--line); }
+.bar .rng { position: absolute; top: 0; bottom: 0; background: var(--accent-soft); border-left: 2px solid var(--accent); border-right: 2px solid var(--accent); }
+.bar .mk { position: absolute; top: -5px; bottom: -5px; width: 3px; margin-left: -1.5px; background: var(--wiper); border-radius: 2px; }
+.scale { display: flex; justify-content: space-between; font: .78rem var(--f-mono); color: var(--muted); margin-top: 4px; }
+.slider-row { display: flex; flex-direction: column; gap: 6px; }
+.slider-row input[type=range] { width: 100%; accent-color: var(--wiper); }
+.slider-ends { display: flex; justify-content: space-between; font-size: .78rem; color: var(--muted); }
+.vout { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.vout strong { font: 600 1.9rem var(--f-mono); color: var(--wiper); font-variant-numeric: tabular-nums; }
+.vout span { color: var(--muted); font-size: .88rem; }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 480px) { .stats { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.stat { display: flex; flex-direction: column; gap: 2px; }
+.stat .lbl { font-size: .78rem; color: var(--muted); }
+.stat .v { font: 600 1.05rem var(--f-mono); font-variant-numeric: tabular-nums; }
+.tbl { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-size: .78rem; font-weight: 500; color: var(--muted); }
+th:first-child, td:first-child { text-align: left; }
+td { font-family: var(--f-mono); font-size: .92rem; }
+tr.tot td { font-weight: 600; border-bottom: 0; }
+.note { font-size: .82rem; color: var(--muted); margin: 0; }
+details { font-size: .9rem; }
+details summary { cursor: pointer; color: var(--muted); }
+.eq { font-family: var(--f-mono); font-size: .88rem; line-height: 1.9; margin-top: 8px; overflow-x: auto; }
+.dim { opacity: .4; }
+@media (prefers-reduced-motion: reduce) { .group { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="back"><a href="../">← 電子回路計算ツール一覧</a></nav>
+  <header>
+    <h1>可変抵抗分圧計算機</h1>
+    <p>可変抵抗（ボリューム）の上下に固定抵抗を入れて、出力電圧の可動範囲を絞る回路の計算です。欲しい電圧範囲を入れると固定抵抗の値を、固定抵抗の値を入れると電圧範囲を計算します。</p>
+  </header>
+
+  <div class="grid">
+    <div class="col">
+      <section class="panel" aria-labelledby="h-in">
+        <h2 id="h-in">回路の条件</h2>
+        <div class="fields">
+          <div class="field">
+            <label for="vcc"><b>Vcc</b>電源電圧</label>
+            <div class="inbox"><input id="vcc" type="text" inputmode="decimal" value="5" autocomplete="off"><span>V</span></div>
+          </div>
+          <div class="field">
+            <label for="rv"><b>VR</b>可変抵抗の最大値</label>
+            <div class="inbox"><input id="rv" type="text" list="pots" value="10k" autocomplete="off"><span>Ω</span></div>
+            <datalist id="pots"><option value="1k"></option><option value="5k"></option><option value="10k"></option><option value="20k"></option><option value="50k"></option><option value="100k"></option><option value="500k"></option><option value="1M"></option></datalist>
+          </div>
+        </div>
+
+        <div class="group" id="g-target">
+          <div class="group-head">出力電圧の範囲 <span class="tag" id="t-target">入力</span></div>
+          <div class="fields">
+            <div class="field">
+              <label for="vmin"><b>Vmin</b>ワイパー GND側端</label>
+              <div class="inbox"><input id="vmin" type="text" inputmode="decimal" value="1" autocomplete="off"><span>V</span></div>
+            </div>
+            <div class="field">
+              <label for="vmax"><b>Vmax</b>ワイパー Vcc側端</label>
+              <div class="inbox"><input id="vmax" type="text" inputmode="decimal" value="4" autocomplete="off"><span>V</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="swap">↕ どちらかを編集すると、もう一方が計算されます</div>
+
+        <div class="group" id="g-res">
+          <div class="group-head">固定抵抗 <span class="tag" id="t-res">計算値</span></div>
+          <div class="fields">
+            <div class="field">
+              <label for="r1"><b>R1</b>Vcc側</label>
+              <div class="inbox"><input id="r1" type="text" autocomplete="off"><span>Ω</span></div>
+            </div>
+            <div class="field">
+              <label for="r2"><b>R2</b>GND側</label>
+              <div class="inbox"><input id="r2" type="text" autocomplete="off"><span>Ω</span></div>
+            </div>
+          </div>
+        </div>
+        <p class="err" id="err" role="alert" hidden></p>
+        <p class="hint">抵抗値は 4.7k、4k7、1M、220 のように入力できます。</p>
+      </section>
+
+      <section class="panel" aria-labelledby="h-e">
+        <h2 id="h-e">市販の抵抗値に丸める
+          <select id="series" aria-label="E系列">
+            <option value="none">丸めない</option>
+            <option value="E6">E6</option>
+            <option value="E12">E12</option>
+            <option value="E24" selected>E24</option>
+            <option value="E96">E96</option>
+          </select>
+        </h2>
+        <div id="ecard"></div>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="panel" aria-labelledby="h-sc">
+        <h2 id="h-sc">回路図</h2>
+        <svg class="schem" id="schem" viewBox="0 0 340 460" role="img" aria-label="Vcc から R1、可変抵抗、R2 を経て GND に至る分圧回路。可変抵抗のワイパーが出力。">
+          <circle class="term" cx="120" cy="26" r="5"></circle>
+          <text x="134" y="31" class="b">Vcc</text>
+          <text x="172" y="31" id="s-vcc" class="m"></text>
+          <path class="w" d="M120 31 V60"></path>
+          <path class="w" id="z-r1"></path>
+          <text x="100" y="92" text-anchor="end" class="b">R1</text>
+          <text x="100" y="110" text-anchor="end" id="s-r1" class="m"></text>
+          <path class="w" d="M120 130 V175"></path>
+          <circle class="dot" cx="120" cy="165" r="3.5"></circle>
+          <text x="134" y="160" id="s-top" class="m"></text>
+          <path class="vr" id="z-vr"></path>
+          <text x="100" y="222" text-anchor="end" class="b acc">VR</text>
+          <text x="100" y="240" text-anchor="end" id="s-rv" class="m"></text>
+          <path class="w" d="M120 285 V330"></path>
+          <circle class="dot" cx="120" cy="295" r="3.5"></circle>
+          <text x="134" y="312" id="s-bot" class="m"></text>
+          <path class="w" id="z-r2"></path>
+          <text x="100" y="362" text-anchor="end" class="b">R2</text>
+          <text x="100" y="380" text-anchor="end" id="s-r2" class="m"></text>
+          <path class="w" d="M120 400 V425 M102 425 H138 M109 432 H131 M116 439 H124"></path>
+          <g id="wiper">
+            <path class="wp" id="wp-line"></path>
+            <polygon class="wpf" id="wp-head"></polygon>
+          </g>
+          <circle class="termw" cx="296" cy="230" r="5"></circle>
+          <text x="296" y="212" text-anchor="middle" class="wt">Vout</text>
+          <text x="296" y="254" text-anchor="middle" id="s-vout" class="wt"></text>
+        </svg>
+
+        <div>
+          <div class="bar" aria-hidden="true"><div class="rng" id="bar-rng"></div><div class="mk" id="bar-mk"></div></div>
+          <div class="scale"><span>0 V</span><span id="bar-vcc"></span></div>
+        </div>
+
+        <div class="slider-row">
+          <label for="pos" class="hint">ワイパー位置（Bカーブ＝直線変化として計算）</label>
+          <input id="pos" type="range" min="0" max="1000" value="500">
+          <div class="slider-ends"><span>GND側 0%</span><span>Vcc側 100%</span></div>
+          <div class="vout"><strong id="vout">—</strong><span id="posl"></span></div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-pw">
+        <h2 id="h-pw">電流・消費電力</h2>
+        <div class="stats">
+          <div class="stat"><span class="lbl">回路電流</span><span class="v" id="st-i">—</span></div>
+          <div class="stat"><span class="lbl">合成抵抗</span><span class="v" id="st-rt">—</span></div>
+          <div class="stat"><span class="lbl">出力インピーダンス（現在 / 最大）</span><span class="v" id="st-zo">—</span></div>
+        </div>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>素子</th><th>抵抗値</th><th>電圧降下</th><th>消費電力</th></tr></thead>
+            <tbody id="ptbl"></tbody>
+          </table>
+        </div>
+        <p class="note">ワイパーに負荷をつながない（電流が流れない）前提の計算です。出力に負荷をつなぐ場合は、負荷の入力インピーダンスが上の出力インピーダンス（最大）より十分大きい（目安 10 倍以上）ことを確認してください。電流はワイパー位置によらず一定です。</p>
+        <details>
+          <summary>計算式</summary>
+          <div class="eq">
+            Rt = R1 + VR + R2<br>
+            Vmin = Vcc × R2 / Rt<br>
+            Vmax = Vcc × (R2 + VR) / Rt<br>
+            R2 = VR × Vmin / (Vmax − Vmin)<br>
+            R1 = VR × (Vcc − Vmax) / (Vmax − Vmin)
+          </div>
+        </details>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const SERIES = {
+    E6: [10, 15, 22, 33, 47, 68],
+    E12: [10, 12, 15, 18, 22, 27, 33, 39, 47, 56, 68, 82],
+    E24: [10, 11, 12, 13, 15, 16, 18, 20, 22, 24, 27, 30, 33, 36, 39, 43, 47, 51, 56, 62, 68, 75, 82, 91],
+    E96: [100,102,105,107,110,113,115,118,121,124,127,130,133,137,140,143,147,150,154,158,162,165,169,174,178,182,187,191,196,200,205,210,215,221,226,232,237,243,249,255,261,267,274,280,287,294,301,309,316,324,332,340,348,357,365,374,383,392,402,412,422,432,442,453,464,475,487,499,511,523,536,549,562,576,590,604,619,634,649,665,681,698,715,732,750,768,787,806,825,845,866,887,909,931,953,976]
+  };
+  const TOL = { E6: null, E12: "silver", E24: "gold", E96: "brown" };
+  const BAND = ["#111111", "#7a4a1f", "#d0302a", "#ee7d1d", "#f2d21b", "#2f9e44", "#2d62d6", "#7d3fc4", "#8a8f96", "#f4f4f4"];
+  const GOLD = "#c9a227", SILVER = "#b9bec5";
+  const MULT = { p: 1e-12, n: 1e-9, u: 1e-6, "µ": 1e-6, m: 1e-3, "": 1, r: 1, R: 1, k: 1e3, K: 1e3, M: 1e6, G: 1e9 };
+
+  let mode = "target"; // "target": Vmin/Vmax → R1/R2, "resistor": R1/R2 → Vmin/Vmax
+  let state = null;
+
+  function parse(str) {
+    if (str == null) return NaN;
+    let s = String(str).trim().replace(/[,\s]/g, "").replace(/(Ω|ohms?|V|v)$/i, "");
+    if (s === "") return NaN;
+    let m = s.match(/^([0-9]*\.?[0-9]+)([pnuµmrRkKMG]?)$/);
+    if (m) return parseFloat(m[1]) * MULT[m[2]];
+    m = s.match(/^([0-9]+)([rRkKM])([0-9]+)$/); // 4k7, 2R2
+    if (m) return parseFloat(m[1] + "." + m[3]) * MULT[m[2]];
+    return NaN;
+  }
+  function num(x, sig) {
+    if (x === 0) return "0";
+    return String(Number(x.toPrecision(sig || 4)));
+  }
+  function rStr(v, sig) {
+    if (v >= 1e6) return num(v / 1e6, sig) + "M";
+    if (v >= 1e3) return num(v / 1e3, sig) + "k";
+    return num(v, sig);
+  }
+  const rDisp = (v, sig) => rStr(v, sig).replace(/([kM])$/, " $1").replace(/(\d)$/, "$1 ") + "Ω";
+  const vDisp = (v) => (Math.abs(v) < 1e-9 ? 0 : v).toFixed(3) + " V";
+  function iDisp(a) {
+    if (a < 1e-3) return num(a * 1e6, 3) + " µA";
+    if (a < 1) return num(a * 1e3, 3) + " mA";
+    return num(a, 3) + " A";
+  }
+  function pDisp(w) {
+    if (w === 0) return "0 W";
+    if (w < 1e-3) return num(w * 1e6, 3) + " µW";
+    if (w < 1) return num(w * 1e3, 3) + " mW";
+    return num(w, 3) + " W";
+  }
+  function mvSigned(d) {
+    const mv = d * 1000;
+    const s = Math.abs(mv) < 0.05 ? "±0" : (mv > 0 ? "+" : "−") + num(Math.abs(mv), 3);
+    return s + " mV";
+  }
+
+  // --- schematic geometry ---
+  function zig(x, y0, y1, n) {
+    const lead = 6, h = (y1 - y0 - 2 * lead) / (n * 2);
+    let d = `M${x} ${y0} V${y0 + lead}`;
+    let y = y0 + lead;
+    for (let i = 0; i < n * 2; i++) {
+      y += h;
+      d += ` L${x + (i % 2 ? -10 : 10)} ${y - h / 2} L${x} ${y}`;
+    }
+    return d + ` V${y1}`;
+  }
+  $("z-r1").setAttribute("d", zig(120, 60, 130, 3));
+  $("z-vr").setAttribute("d", zig(120, 175, 285, 5));
+  $("z-r2").setAttribute("d", zig(120, 330, 400, 3));
+
+  function setWiper(p) {
+    const y = 279 - p * 98;
+    $("wp-line").setAttribute("d", `M146 ${y} H210 V230 H291`);
+    $("wp-head").setAttribute("points", `133,${y} 147,${y - 6} 147,${y + 6}`);
+  }
+
+  // --- validation helpers ---
+  function mark(id, bad) { $(id).parentElement.classList.toggle("bad", !!bad); }
+  function fail(msg, ids) {
+    ["vcc", "rv", "vmin", "vmax", "r1", "r2"].forEach((i) => mark(i, ids.includes(i)));
+    $("err").textContent = msg;
+    $("err").hidden = false;
+    state = null;
+    document.querySelectorAll(".dimmable").forEach((e) => e.classList.add("dim"));
+    $("ecard").innerHTML = "";
+  }
+
+  function setMode(m) {
+    mode = m;
+    $("g-target").classList.toggle("computed", m === "resistor");
+    $("g-res").classList.toggle("computed", m === "target");
+    $("t-target").textContent = m === "resistor" ? "計算値" : "入力";
+    $("t-res").textContent = m === "target" ? "計算値" : "入力";
+  }
+
+  function recalc(src) {
+    if (src === "vmin" || src === "vmax") setMode("target");
+    if (src === "r1" || src === "r2") setMode("resistor");
+
+    const vcc = parse($("vcc").value), rv = parse($("rv").value);
+    if (!(vcc > 0)) return fail("電源電圧には 0 より大きい数値を入れてください。", ["vcc"]);
+    if (!(rv > 0)) return fail("可変抵抗の最大値には 0 より大きい値を入れてください（例: 10k）。", ["rv"]);
+
+    let r1, r2, vmin, vmax;
+    if (mode === "target") {
+      vmin = parse($("vmin").value); vmax = parse($("vmax").value);
+      if (isNaN(vmin)) return fail("Vmin に数値を入れてください。", ["vmin"]);
+      if (isNaN(vmax)) return fail("Vmax に数値を入れてください。", ["vmax"]);
+      if (vmin < 0) return fail("Vmin は 0 V 以上にしてください。", ["vmin"]);
+      if (vmax > vcc) return fail(`Vmax は電源電圧（${num(vcc)} V）以下にしてください。`, ["vmax"]);
+      if (vmin >= vmax) return fail("Vmin は Vmax より小さくしてください。", ["vmin", "vmax"]);
+      const span = vmax - vmin;
+      r2 = rv * vmin / span;
+      r1 = rv * (vcc - vmax) / span;
+      if (src !== "r1") $("r1").value = rStr(r1);
+      if (src !== "r2") $("r2").value = rStr(r2);
+    } else {
+      r1 = parse($("r1").value); r2 = parse($("r2").value);
+      if (!(r1 >= 0)) return fail("R1 には 0 以上の抵抗値を入れてください（例: 3.3k）。", ["r1"]);
+      if (!(r2 >= 0)) return fail("R2 には 0 以上の抵抗値を入れてください（例: 3.3k）。", ["r2"]);
+      const rt = r1 + rv + r2;
+      vmin = vcc * r2 / rt; vmax = vcc * (r2 + rv) / rt;
+      $("vmin").value = num(vmin);
+      $("vmax").value = num(vmax);
+    }
+    ["vcc", "rv", "vmin", "vmax", "r1", "r2"].forEach((i) => mark(i, false));
+    $("err").hidden = true;
+    document.querySelectorAll(".dimmable").forEach((e) => e.classList.remove("dim"));
+    state = { vcc, rv, r1, r2, vmin, vmax };
+    render();
+  }
+
+  function render() {
+    if (!state) return;
+    const { vcc, rv, r1, r2, vmin, vmax } = state;
+    const rt = r1 + rv + r2;
+    const i = vcc / rt;
+
+    // schematic labels
+    $("s-vcc").textContent = vDisp(vcc);
+    $("s-r1").textContent = r1 === 0 ? "0 Ω" : rDisp(r1);
+    $("s-rv").textContent = rDisp(rv);
+    $("s-r2").textContent = r2 === 0 ? "0 Ω" : rDisp(r2);
+    $("s-top").textContent = vDisp(vmax);
+    $("s-bot").textContent = vDisp(vmin);
+
+    // range bar
+    $("bar-rng").style.left = (vmin / vcc * 100) + "%";
+    $("bar-rng").style.width = ((vmax - vmin) / vcc * 100) + "%";
+    $("bar-vcc").textContent = num(vcc) + " V";
+
+    // wiper
+    const p = $("pos").value / 1000;
+    const vout = vcc * (r2 + p * rv) / rt;
+    setWiper(p);
+    $("s-vout").textContent = vDisp(vout);
+    $("vout").textContent = vDisp(vout);
+    $("posl").textContent = `位置 ${(p * 100).toFixed(1)}%`;
+    $("bar-mk").style.left = (vout / vcc * 100) + "%";
+
+    // output impedance: (resistance above) ∥ (resistance below)
+    const below = r2 + p * rv, above = rt - below;
+    const zNow = below * above / rt;
+    const half = Math.min(Math.max(rt / 2, r2), r2 + rv);
+    const zMax = half * (rt - half) / rt;
+
+    $("st-i").textContent = iDisp(i);
+    $("st-rt").textContent = rDisp(rt, 4);
+    $("st-zo").textContent = rStr(zNow, 3) + " / " + rStr(zMax, 3) + " Ω";
+
+    const rows = [["R1", r1], ["VR", rv], ["R2", r2]];
+    $("ptbl").innerHTML = rows.map(([n, r]) =>
+      `<tr><td>${n}</td><td>${r === 0 ? "0 Ω" : rDisp(r)}</td><td>${vDisp(i * r)}</td><td>${pDisp(i * i * r)}</td></tr>`
+    ).join("") + `<tr class="tot"><td>合計</td><td>${rDisp(rt, 4)}</td><td>${vDisp(vcc)}</td><td>${pDisp(vcc * i)}</td></tr>`;
+
+    renderE();
+  }
+
+  // --- E-series rounding ---
+  function neighbours(v, s) {
+    if (v <= 0) return [0];
+    const list = SERIES[s], base = s === "E96" ? 100 : 10;
+    const d = Math.floor(Math.log10(v));
+    let lo = 0, hi = Infinity;
+    for (let k = d - 2; k <= d + 1; k++) {
+      for (const m of list) {
+        const c = Number((m / base * Math.pow(10, k)).toPrecision(4));
+        if (c <= v * (1 + 1e-9) && c > lo) lo = c;
+        if (c >= v * (1 - 1e-9) && c < hi) hi = c;
+      }
+    }
+    const out = [];
+    if (lo > 0) out.push(lo);
+    if (isFinite(hi) && hi !== lo) out.push(hi);
+    // allow dropping a very small resistor to 0 Ω (jumper)
+    if (lo === 0 || v < 1) out.push(0);
+    return out;
+  }
+
+  function bands(v, s) {
+    if (v === 0) return '<span class="short">ジャンパ（0 Ω）</span>';
+    const digits = s === "E96" ? 3 : 2;
+    const e = Math.floor(Math.log10(v) + 1e-9) - (digits - 1);
+    const sig = Math.round(v / Math.pow(10, e));
+    const ds = String(sig).padStart(digits, "0").split("").map(Number);
+    const multColor = e === -1 ? GOLD : e === -2 ? SILVER : BAND[e] || "#111111";
+    const tol = TOL[s];
+    const title = `${rDisp(v, 3)}${tol ? "" : "（許容差 ±20%）"}`;
+    let html = `<span class="rbody" title="カラーコード ${title}" aria-label="カラーコード">`;
+    html += ds.map((d) => `<i style="background:${BAND[d]}"></i>`).join("");
+    html += `<i style="background:${multColor}"></i>`;
+    if (tol) html += `<i class="tol" style="background:${tol === "gold" ? GOLD : tol === "silver" ? SILVER : BAND[1]}"></i>`;
+    return html + "</span>";
+  }
+
+  function renderE() {
+    const s = $("series").value, card = $("ecard");
+    if (s === "none" || !state) {
+      card.innerHTML = '<p class="hint">E系列を選ぶと、手に入る抵抗値の中から目標の電圧範囲に最も近い R1・R2 の組み合わせを探します。</p>';
+      return;
+    }
+    const { vcc, rv, r1, r2, vmin, vmax } = state;
+    let best = null;
+    for (const a of neighbours(r1, s)) for (const b of neighbours(r2, s)) {
+      const rt = a + rv + b;
+      const lo = vcc * b / rt, hi = vcc * (b + rv) / rt;
+      const err = Math.max(Math.abs(lo - vmin), Math.abs(hi - vmax));
+      if (!best || err < best.err - 1e-12) best = { a, b, lo, hi, err };
+    }
+    const same = Math.abs(best.a - r1) <= r1 * 1e-6 && Math.abs(best.b - r2) <= r2 * 1e-6;
+    const row = (n, v, ideal) => `<div class="erow"><span class="nm">${n}</span>
+      <span class="val">${v === 0 ? "0 Ω" : rDisp(v, 3)}<small>${mode === "target" ? "理論値" : "現在値"} ${ideal === 0 ? "0 Ω" : rDisp(ideal)}</small></span>${bands(v, s)}</div>`;
+    card.innerHTML = `<div style="display:flex;flex-direction:column;gap:12px">
+      ${row("R1", best.a, r1)}${row("R2", best.b, r2)}
+      <div class="actual"><span class="lbl">この組み合わせで得られる範囲</span>
+        <span>${vDisp(best.lo)} 〜 ${vDisp(best.hi)}</span>
+        <span class="lbl">目標との差: Vmin ${mvSigned(best.lo - vmin)} / Vmax ${mvSigned(best.hi - vmax)}</span></div>
+      <button class="btn" id="apply" type="button" ${same ? "disabled" : ""}>${same ? "現在の R1・R2 は " + s + " 系列の値です" : "この値を R1・R2 に入れる"}</button>
+    </div>`;
+    if (!same) $("apply").addEventListener("click", () => {
+      $("r1").value = rStr(best.a, 3);
+      $("r2").value = rStr(best.b, 3);
+      recalc("r1");
+    });
+  }
+
+  ["vcc", "rv", "vmin", "vmax", "r1", "r2"].forEach((id) =>
+    $(id).addEventListener("input", () => recalc(id)));
+  $("rv").addEventListener("change", () => recalc("rv"));
+  $("pos").addEventListener("input", render);
+  $("series").addEventListener("change", renderE);
+
+  document.querySelector('[aria-labelledby="h-sc"]').classList.add("dimmable");
+  document.querySelector('[aria-labelledby="h-pw"]').classList.add("dimmable");
+  setMode("target");
+  recalc("vmin");
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>電子回路計算ツール</title>
+<meta name="description" content="分圧回路、コンパレータのヒステリシス、LED の電流制限抵抗を計算するブラウザ用ツール集。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+JP:wght@400;500;700&display=swap">
+<style>
+/* Layout: one column of three tool cards, each with a schematic thumbnail */
+:root {
+  --bg: #eef1f4;
+  --panel: #ffffff;
+  --ink: #18202a;
+  --muted: #5b6673;
+  --line: #d3d9e0;
+  --accent: #1f5fbf;
+  --accent-soft: #e4ecf9;
+  --hot: #c46f1c;
+  --f-body: "IBM Plex Sans JP", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141a; --panel: #161d25; --ink: #e4e9ef; --muted: #95a2af; --line: #2b3541;
+    --accent: #79a8f2; --accent-soft: #1b2940; --hot: #f0a252; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141a; --panel: #161d25; --ink: #e4e9ef; --muted: #95a2af; --line: #2b3541;
+  --accent: #79a8f2; --accent-soft: #1b2940; --hot: #f0a252; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 48px;
+}
+.wrap { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+header h1 { font-size: 1.8rem; font-weight: 700; margin: 0; letter-spacing: .01em; text-wrap: balance; }
+header p { margin: 6px 0 0; color: var(--muted); max-width: 60ch; }
+.tools { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.tool a {
+  display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 20px; align-items: center;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 18px 20px;
+  color: inherit; text-decoration: none; transition: border-color .15s, box-shadow .15s;
+}
+.tool a:hover { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.tool a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 520px) { .tool a { grid-template-columns: 72px minmax(0, 1fr); gap: 14px; padding: 16px; } }
+.thumb { width: 100%; height: auto; display: block; }
+.thumb .w { stroke: var(--ink); stroke-width: 2; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.thumb .a { stroke: var(--accent); stroke-width: 2.2; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.thumb .h { stroke: var(--hot); stroke-width: 2; fill: none; stroke-linecap: round; }
+.thumb .hf { fill: var(--hot); }
+.thumb .t { fill: var(--panel); stroke: var(--ink); stroke-width: 2; }
+.thumb .df { fill: var(--ink); stroke: var(--ink); stroke-width: 1.5; stroke-linejoin: round; }
+.body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.body h2 { margin: 0; font-size: 1.15rem; font-weight: 700; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.body h2 span { color: var(--accent); font-size: .95rem; }
+.body p { margin: 0; color: var(--muted); font-size: .92rem; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.tags li { list-style: none; font-size: .74rem; padding: 1px 9px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); }
+.tags { padding: 0; margin-bottom: 0; }
+footer { color: var(--muted); font-size: .82rem; border-top: 1px solid var(--line); padding-top: 14px; display: flex; flex-direction: column; gap: 4px; }
+footer p { margin: 0; }
+@media (prefers-reduced-motion: reduce) { .tool a { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>電子回路計算ツール</h1>
+    <p>回路を組むときによく出てくる計算を、ブラウザだけで済ませるためのツール集です。どのツールも、条件を入れると部品の値を計算し、部品の値を入れると結果を逆算します。</p>
+  </header>
+
+  <ul class="tools">
+    <li class="tool">
+      <a href="variable-voltage-divider/">
+        <svg class="thumb" viewBox="0 0 120 120" aria-hidden="true">
+          <circle class="t" cx="40" cy="12" r="4"></circle>
+          <path class="w" d="M40 16 V24 L48 28 L32 34 L48 40 L32 46 L40 50 V56"></path>
+          <path class="a" d="M40 56 V60 L48 64 L32 70 L48 76 L32 82 L48 88 L40 92"></path>
+          <path class="w" d="M40 92 V96 L48 99 L32 103 L48 107 L40 110 V112"></path>
+          <path class="h" d="M92 74 H54"></path>
+          <polygon class="hf" points="50,74 58,70 58,78"></polygon>
+          <circle class="t" cx="96" cy="74" r="4"></circle>
+        </svg>
+        <div class="body">
+          <h2>可変抵抗分圧計算機</h2>
+          <p>可変抵抗を2つの固定抵抗で挟んで、出力電圧の可動範囲を絞る回路の計算です。欲しい電圧範囲から上下の固定抵抗を、固定抵抗から電圧範囲を求めます。</p>
+          <ul class="tags"><li>E系列への丸め</li><li>ワイパー位置スライダー</li><li>電流・消費電力</li></ul>
+        </div>
+      </a>
+    </li>
+    <li class="tool">
+      <a href="comparator-hysteresis/">
+        <svg class="thumb" viewBox="0 0 120 120" aria-hidden="true">
+          <path class="a" d="M30 50 V22 H44 L48 16 L54 28 L60 16 L66 28 L72 16 L76 22 H100 V60"></path>
+          <polygon class="t" points="44,36 44,84 84,60"></polygon>
+          <path class="w" d="M10 50 H44 M24 70 H44 M84 60 H112"></path>
+          <circle class="df" cx="30" cy="50" r="2.5"></circle>
+          <circle class="df" cx="100" cy="60" r="2.5"></circle>
+          <path class="h" d="M14 112 H78 V96 M106 96 H50 V112"></path>
+        </svg>
+        <div class="body">
+          <h2>コンパレータヒステリシス計算機</h2>
+          <p>ヒステリシス付きコンパレータの抵抗を、しきい値から計算し、抵抗値からしきい値を逆算します。反転型・非反転型、プッシュプル・オープンドレインに対応しています。</p>
+          <ul class="tags"><li>E系列への丸め</li><li>ヒステリシスループ</li><li>CircuitJS で検証</li></ul>
+        </div>
+      </a>
+    </li>
+    <li class="tool">
+      <a href="led-resistor/">
+        <svg class="thumb" viewBox="0 0 120 120" aria-hidden="true">
+          <circle class="t" cx="10" cy="70" r="4"></circle>
+          <path class="w" d="M14 70 H24 L28 62 L34 78 L40 62 L46 78 L50 70 H66"></path>
+          <path class="df" d="M66 58 L88 70 L66 82 Z"></path>
+          <path class="w" d="M88 58 V82 M88 70 H112"></path>
+          <path class="h" d="M80 52 L88 42 M88 54 L96 44"></path>
+          <polygon class="hf" points="90,39 87,46 84,43"></polygon>
+          <polygon class="hf" points="98,41 95,48 92,45"></polygon>
+        </svg>
+        <div class="body">
+          <h2>LED電流制限抵抗計算機</h2>
+          <p>LED の色・電源電圧・明るさを選ぶだけで、直列に入れる抵抗の値がわかります。手持ちの抵抗で流れる電流と明るさも確かめられます。</p>
+          <ul class="tags"><li>初心者向け</li><li>明るさシミュレーション</li><li>計算式つき</li></ul>
+        </div>
+      </a>
+    </li>
+  </ul>
+
+  <footer>
+    <p>計算はすべてブラウザの中で行います。入力した値が外部に送られるのは、コンパレータヒステリシス計算機の「CircuitJS で開く」を押したとき（回路データを falstad.com に渡します）だけです。</p>
+    <p>結果は理想的な部品を前提にした目安です。実際の回路ではデータシートの値と許容差を確かめてください。</p>
+  </footer>
+</div>
+</body>
+</html>
