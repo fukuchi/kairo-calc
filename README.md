@@ -27,16 +27,13 @@
 
 各ツールは CSS と JavaScript を1つの HTML に含んだ単独のファイルです。ツール間で共有するファイルはありません。
 
-## ローカルで確認する
-
-```bash
-python3 -m http.server 8000
-```
-
-ブラウザで http://localhost:8000/ を開きます。
-
 ## 外部への依存
 
 - フォント: Google Fonts（IBM Plex Sans JP / IBM Plex Mono）。読み込めない場合はシステムフォントで表示されます。
 - コンパレータヒステリシス計算機のみ: lz-string 1.5.0（cdnjs）。CircuitJS へのリンク用に回路データを圧縮します。読み込めない場合は非圧縮のリンク（`?cct=`）になります。
 - 「CircuitJS で開く」は https://www.falstad.com/circuit/ の CircuitJS を開きます。
+
+## 参考文献
+
+- Art Kay and Tim Green. "[Analog Engineer'S Pocket Reference (Fifth Edition)](https://www.ti.com/document-viewer/lit/html/slyw038)" (2025)
+- "[Analog circuits | Texas Instruments](https://www.ti.com/en-us/design-development/analog-circuits)"
