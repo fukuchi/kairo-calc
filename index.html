@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>電子回路計算ツール</title>
-<meta name="description" content="分圧回路、コンパレータのヒステリシス、LED の電流制限抵抗を計算するブラウザ用ツール集。">
+<meta name="description" content="分圧回路（可変抵抗・固定抵抗）、コンパレータのヒステリシス、LED の電流制限抵抗を計算するブラウザ用ツール集。">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+JP:wght@400;500;700&display=swap">
 <style>
@@ -93,6 +93,23 @@ footer p { margin: 0; }
           <h2>可変抵抗分圧計算機</h2>
           <p>可変抵抗を2つの固定抵抗で挟んで、出力電圧の可動範囲を絞る回路の計算です。欲しい電圧範囲から上下の固定抵抗を、固定抵抗から電圧範囲を求めます。</p>
           <ul class="tags"><li>E系列への丸め</li><li>ワイパー位置スライダー</li><li>電流・消費電力</li></ul>
+        </div>
+      </a>
+    </li>
+    <li class="tool">
+      <a href="voltage-divider/">
+        <svg class="thumb" viewBox="0 0 120 120" aria-hidden="true">
+          <circle class="t" cx="40" cy="12" r="4"></circle>
+          <path class="w" d="M40 16 V24 L48 28 L32 36 L48 44 L32 52 L40 56 V60"></path>
+          <path class="a" d="M40 60 V64 L48 68 L32 76 L48 84 L32 92 L40 96 V100"></path>
+          <path class="w" d="M28 104 H52 M33 109 H47"></path>
+          <path class="h" d="M40 60 H92"></path>
+          <circle class="t" cx="96" cy="60" r="4"></circle>
+        </svg>
+        <div class="body">
+          <h2>固定抵抗分圧計算機</h2>
+          <p>可変抵抗を使わない、2本の固定抵抗だけの分圧回路の計算です。欲しい出力電圧から R1・R2 を、R1・R2 から出力電圧を求めます。</p>
+          <ul class="tags"><li>E系列への丸め</li><li>電流・消費電力</li><li>カラーコード</li></ul>
         </div>
       </a>
     </li>

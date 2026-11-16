@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>固定抵抗分圧計算機</title>
+<meta name="description" content="可変抵抗を使わない、2本の固定抵抗による分圧回路の計算です。欲しい出力電圧から R1・R2 を、R1・R2 から出力電圧を求めます。">
+<style>:root{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+JP:wght@400;500;700&display=swap">
+<style>
+.back{font-size:.85rem}.back a{color:var(--muted);text-decoration:none}.back a:hover{color:var(--accent);text-decoration:underline}
+:root {
+  --bg: #eef1f4; --panel: #ffffff; --ink: #18202a; --muted: #5b6673; --line: #d3d9e0;
+  --accent: #1f5fbf; --accent-soft: #e4ecf9; --danger: #b83224; --danger-soft: #fbe6e3; --rbody: #e6cf9d;
+  --f-body: "IBM Plex Sans JP", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141a; --panel: #161d25; --ink: #e4e9ef; --muted: #95a2af; --line: #2b3541;
+    --accent: #79a8f2; --accent-soft: #1b2940; --danger: #ff8172; --danger-soft: #3a1c19; --rbody: #d6bd8a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141a; --panel: #161d25; --ink: #e4e9ef; --muted: #95a2af; --line: #2b3541;
+  --accent: #79a8f2; --accent-soft: #1b2940; --danger: #ff8172; --danger-soft: #3a1c19; --rbody: #d6bd8a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 48px;
+}
+.wrap { max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+header h1 { font-size: 1.6rem; font-weight: 700; margin: 0; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 64ch; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 760px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.panel h2 { font-size: .8rem; font-weight: 600; letter-spacing: .08em; color: var(--muted); margin: 0; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 400px) { .fields { grid-template-columns: minmax(0, 1fr); } }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field label { font-size: .82rem; color: var(--muted); }
+.field label b { color: var(--ink); font-family: var(--f-mono); font-weight: 600; margin-right: 4px; }
+.field label em { font-style: normal; }
+.field.computed .inbox { background: var(--accent-soft); }
+.inbox { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); }
+.inbox:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.inbox input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink); font: 500 1.05rem var(--f-mono); padding: 8px 10px; outline: none; font-variant-numeric: tabular-nums; }
+.inbox span { padding-right: 10px; color: var(--muted); font-family: var(--f-mono); }
+.inbox.bad { border-color: var(--danger); }
+select { font: 500 .95rem var(--f-body); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 7px 8px; }
+.msg { margin: 0; padding: 10px 12px; border-radius: 4px; font-size: .88rem; background: var(--danger-soft); color: var(--danger); }
+.hint { color: var(--muted); font-size: .85rem; margin: 0; }
+.schem { width: 100%; max-width: 300px; height: auto; display: block; margin: 0 auto; }
+.schem .w { stroke: var(--ink); stroke-width: 2; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.schem .term { fill: var(--panel); stroke: var(--ink); stroke-width: 2; }
+.schem .dot { fill: var(--ink); }
+.schem text { font-family: var(--f-mono); font-size: 13px; fill: var(--ink); }
+.schem text.m { fill: var(--muted); font-size: 12px; }
+.schem text.b { font-weight: 600; }
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.stat { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.stat .lbl { font-size: .78rem; color: var(--muted); }
+.stat .v { font: 600 1.05rem var(--f-mono); font-variant-numeric: tabular-nums; }
+.erow { display: grid; grid-template-columns: 2.5em minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.erow .nm { font: 600 .95rem var(--f-mono); }
+.erow .val { font: 600 1.4rem var(--f-mono); font-variant-numeric: tabular-nums; }
+.erow .val small { font: 400 .78rem var(--f-body); color: var(--muted); display: block; }
+.rbody { display: inline-flex; gap: 4px; align-items: stretch; height: 22px; padding: 0 9px; border-radius: 8px; background: var(--rbody); }
+.rbody i { width: 6px; display: block; }
+.rbody i.tol { margin-left: 7px; }
+.ebox { display: flex; flex-direction: column; gap: 12px; }
+.actual { display: flex; flex-direction: column; gap: 2px; font-family: var(--f-mono); }
+.actual .lbl { font: .78rem var(--f-body); color: var(--muted); }
+.btn { font: 500 .9rem var(--f-body); color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 4px; padding: 8px 12px; cursor: pointer; }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dim { opacity: .4; }
+table { border-collapse: collapse; width: 100%; font-family: var(--f-mono); font-size: .9rem; }
+th, td { text-align: right; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+th:first-child, td:first-child { text-align: left; }
+th { font: 500 .78rem var(--f-body); color: var(--muted); }
+.eq { font-family: var(--f-mono); font-size: .88rem; line-height: 1.8; padding: 8px 12px; background: var(--bg); border-radius: 4px; overflow-x: auto; white-space: nowrap; }
+.eq b { color: var(--accent); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="back"><a href="../">← 電子回路計算ツール一覧</a></nav>
+  <header>
+    <h1>固定抵抗分圧計算機</h1>
+    <p>可変抵抗を使わない、2本の固定抵抗（R1・R2）だけの分圧回路です。欲しい出力電圧から R1・R2 を、R1・R2 から出力電圧を求めます。</p>
+  </header>
+
+  <div class="grid">
+    <div class="col">
+      <section class="panel" aria-labelledby="h-in">
+        <h2 id="h-in">条件</h2>
+        <div class="fields">
+          <div class="field">
+            <label for="vin"><b>Vin</b>入力電圧</label>
+            <div class="inbox"><input id="vin" type="text" inputmode="decimal" value="5" autocomplete="off"><span>V</span></div>
+          </div>
+          <div class="field" id="g-vout">
+            <label for="vout"><b>Vout</b>出力電圧 <em id="t-vout"></em></label>
+            <div class="inbox"><input id="vout" type="text" inputmode="decimal" value="3.3" autocomplete="off"><span>V</span></div>
+          </div>
+          <div class="field" id="g-rt">
+            <label for="rt"><b>R1+R2</b>合計抵抗 <em id="t-rt"></em></label>
+            <div class="inbox"><input id="rt" type="text" value="10k" autocomplete="off"><span>Ω</span></div>
+          </div>
+        </div>
+        <p class="hint">Vout と合計抵抗を入れると R1・R2 が決まります。R1・R2 を直接入力すると、Vout と合計抵抗が逆算されます。合計抵抗は、流れる電流（Vin ÷ 合計）と出力インピーダンスのバランスで選びます。</p>
+        <div class="fields">
+          <div class="field" id="g-r1">
+            <label for="r1"><b>R1</b>上側の抵抗 <em id="t-r1"></em></label>
+            <div class="inbox"><input id="r1" type="text" autocomplete="off"><span>Ω</span></div>
+          </div>
+          <div class="field" id="g-r2">
+            <label for="r2"><b>R2</b>下側の抵抗 <em id="t-r2"></em></label>
+            <div class="inbox"><input id="r2" type="text" autocomplete="off"><span>Ω</span></div>
+          </div>
+        </div>
+        <p class="msg" id="err" role="alert" hidden></p>
+      </section>
+
+      <section class="panel dimmable" aria-labelledby="h-sc">
+        <h2 id="h-sc">回路図</h2>
+        <svg class="schem" viewBox="0 0 300 220" role="img" aria-label="Vin から R1、R2 を直列にして GND へ、R1 と R2 の接続点が Vout">
+          <circle class="term" cx="80" cy="14" r="4"></circle>
+          <path class="w" d="M80 18 V30 L90 36 L70 46 L90 56 L70 66 L90 76 L80 82 V100"></path>
+          <path class="w" d="M80 100 V112 L90 118 L70 128 L90 138 L70 148 L90 158 L80 164 V190"></path>
+          <path class="w" d="M60 190 H100 M68 197 H92 M76 204 H84"></path>
+          <circle class="dot" cx="80" cy="100" r="3"></circle>
+          <path class="w" d="M80 100 H210"></path>
+          <circle class="term" cx="214" cy="100" r="4"></circle>
+          <text x="96" y="16" class="m">Vin</text><text id="s-vin" x="126" y="16" class="b"></text>
+          <text x="104" y="54" class="m">R1</text><text id="s-r1" x="126" y="54" class="b"></text>
+          <text x="104" y="142" class="m">R2</text><text id="s-r2" x="126" y="142" class="b"></text>
+          <text x="130" y="90" class="m">Vout</text><text id="s-vout" x="166" y="90" class="b"></text>
+        </svg>
+        <div class="eq"><b>Vout</b> = Vin × R2 ÷ (R1 + R2)　／　R2 = 合計 × Vout ÷ Vin、R1 = 合計 − R2</div>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="panel dimmable" aria-labelledby="h-pw">
+        <h2 id="h-pw">電流・消費電力</h2>
+        <div class="stats">
+          <div class="stat"><span class="lbl">流れる電流</span><span class="v" id="st-i"></span></div>
+          <div class="stat"><span class="lbl">出力インピーダンス（R1∥R2）</span><span class="v" id="st-zo"></span></div>
+        </div>
+        <table>
+          <thead><tr><th></th><th>抵抗値</th><th>電圧降下</th><th>消費電力</th></tr></thead>
+          <tbody id="ptbl"></tbody>
+        </table>
+      </section>
+
+      <section class="panel dimmable" aria-labelledby="h-e">
+        <h2 id="h-e">E系列への丸め
+          <select id="series" aria-label="E系列">
+            <option value="E6">E6</option>
+            <option value="E12">E12</option>
+            <option value="E24" selected>E24</option>
+            <option value="E96">E96</option>
+          </select>
+        </h2>
+        <div id="ecard"></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const SERIES = {
+    E6: [10, 15, 22, 33, 47, 68],
+    E12: [10, 12, 15, 18, 22, 27, 33, 39, 47, 56, 68, 82],
+    E24: [10, 11, 12, 13, 15, 16, 18, 20, 22, 24, 27, 30, 33, 36, 39, 43, 47, 51, 56, 62, 68, 75, 82, 91],
+    E96: Array.from({ length: 96 }, (_, i) => Math.round(Math.pow(10, i / 96) * 100))
+  };
+  const TOL = { E6: null, E12: "silver", E24: "gold", E96: "brown" };
+  const BAND = ["#111111", "#7a4a1f", "#d0302a", "#ee7d1d", "#f2d21b", "#2f9e44", "#2d62d6", "#7d3fc4", "#8a8f96", "#f4f4f4"];
+  const GOLD = "#c9a227", SILVER = "#b9bec5";
+  const MULT = { p: 1e-12, n: 1e-9, u: 1e-6, "µ": 1e-6, m: 1e-3, "": 1, r: 1, R: 1, k: 1e3, K: 1e3, M: 1e6, G: 1e9 };
+
+  let mode = "target"; // "target": Vout・合計 → R1/R2, "resistor": R1/R2 → Vout・合計
+  let state = null;
+
+  function parse(str) {
+    if (str == null) return NaN;
+    const s = String(str).trim().replace(/[,\s]/g, "").replace(/(Ω|ohms?|V|v)$/i, "");
+    if (s === "") return NaN;
+    let m = s.match(/^([0-9]*\.?[0-9]+)([pnuµmrRkKMG]?)$/);
+    if (m) return parseFloat(m[1]) * MULT[m[2]];
+    m = s.match(/^([0-9]+)([rRkKM])([0-9]+)$/); // 4k7, 2R2
+    if (m) return parseFloat(m[1] + "." + m[3]) * MULT[m[2]];
+    return NaN;
+  }
+  const num = (x, sig) => (x === 0 ? "0" : String(Number(x.toPrecision(sig || 4))));
+  function rStr(v, sig) {
+    if (v >= 1e6) return num(v / 1e6, sig) + "M";
+    if (v >= 1e3) return num(v / 1e3, sig) + "k";
+    return num(v, sig);
+  }
+  const rDisp = (v, sig) => rStr(v, sig).replace(/([kM])$/, " $1").replace(/(\d)$/, "$1 ") + "Ω";
+  const vDisp = (v) => (Math.abs(v) < 1e-9 ? 0 : v).toFixed(3) + " V";
+  function iDisp(a) {
+    if (a < 1e-3) return num(a * 1e6, 3) + " µA";
+    if (a < 1) return num(a * 1e3, 3) + " mA";
+    return num(a, 3) + " A";
+  }
+  function pDisp(w) {
+    if (w < 1e-3) return num(w * 1e6, 3) + " µW";
+    if (w < 1) return num(w * 1e3, 3) + " mW";
+    return num(w, 3) + " W";
+  }
+
+  const IDS = ["vin", "vout", "rt", "r1", "r2"];
+  function mark(id, bad) { $(id).parentElement.classList.toggle("bad", !!bad); }
+  function fail(msg, ids) {
+    IDS.forEach((i) => mark(i, ids.includes(i)));
+    $("err").textContent = msg;
+    $("err").hidden = false;
+    state = null;
+    document.querySelectorAll(".dimmable").forEach((e) => e.classList.add("dim"));
+    $("ecard").innerHTML = "";
+  }
+
+  function setMode(m) {
+    mode = m;
+    const t = m === "target";
+    $("g-vout").classList.toggle("computed", !t);
+    $("g-rt").classList.toggle("computed", !t);
+    $("g-r1").classList.toggle("computed", t);
+    $("g-r2").classList.toggle("computed", t);
+    $("t-vout").textContent = $("t-rt").textContent = t ? "入力" : "計算値";
+    $("t-r1").textContent = $("t-r2").textContent = t ? "計算値" : "入力";
+  }
+
+  function recalc(src) {
+    if (src === "vout" || src === "rt") setMode("target");
+    if (src === "r1" || src === "r2") setMode("resistor");
+
+    const vin = parse($("vin").value);
+    if (!(vin > 0)) return fail("入力電圧には 0 より大きい数値を入れてください。", ["vin"]);
+
+    let r1, r2, vout, rt;
+    if (mode === "target") {
+      vout = parse($("vout").value); rt = parse($("rt").value);
+      if (isNaN(vout)) return fail("Vout に数値を入れてください。", ["vout"]);
+      if (!(vout > 0 && vout < vin)) return fail(`Vout は 0 V より大きく、入力電圧（${num(vin)} V）より小さくしてください。`, ["vout"]);
+      if (!(rt > 0)) return fail("合計抵抗には 0 より大きい値を入れてください（例: 10k）。", ["rt"]);
+      r2 = rt * vout / vin;
+      r1 = rt - r2;
+      if (src !== "r1") $("r1").value = rStr(r1);
+      if (src !== "r2") $("r2").value = rStr(r2);
+    } else {
+      r1 = parse($("r1").value); r2 = parse($("r2").value);
+      if (!(r1 > 0)) return fail("R1 には 0 より大きい抵抗値を入れてください（例: 3.3k）。", ["r1"]);
+      if (!(r2 > 0)) return fail("R2 には 0 より大きい抵抗値を入れてください（例: 6.8k）。", ["r2"]);
+      rt = r1 + r2;
+      vout = vin * r2 / rt;
+      $("vout").value = num(vout);
+      $("rt").value = rStr(rt);
+    }
+    IDS.forEach((i) => mark(i, false));
+    $("err").hidden = true;
+    document.querySelectorAll(".dimmable").forEach((e) => e.classList.remove("dim"));
+    state = { vin, r1, r2, vout, rt };
+    render();
+  }
+
+  function render() {
+    const { vin, r1, r2, vout, rt } = state;
+    const i = vin / rt;
+    $("s-vin").textContent = vDisp(vin);
+    $("s-r1").textContent = rDisp(r1);
+    $("s-r2").textContent = rDisp(r2);
+    $("s-vout").textContent = vDisp(vout);
+    $("st-i").textContent = iDisp(i);
+    $("st-zo").textContent = rDisp(r1 * r2 / rt, 3);
+    $("ptbl").innerHTML = [["R1", r1], ["R2", r2]].map(([n, r]) =>
+      `<tr><td>${n}</td><td>${rDisp(r)}</td><td>${vDisp(i * r)}</td><td>${pDisp(i * i * r)}</td></tr>`
+    ).join("") + `<tr><td>合計</td><td>${rDisp(rt, 4)}</td><td>${vDisp(vin)}</td><td>${pDisp(vin * i)}</td></tr>`;
+    renderE();
+  }
+
+  function neighbours(v, s) {
+    const list = SERIES[s], base = s === "E96" ? 100 : 10;
+    const d = Math.floor(Math.log10(v));
+    let lo = 0, hi = Infinity;
+    for (let k = d - 2; k <= d + 1; k++) {
+      for (const m of list) {
+        const c = Number((m / base * Math.pow(10, k)).toPrecision(4));
+        if (c <= v * (1 + 1e-9) && c > lo) lo = c;
+        if (c >= v * (1 - 1e-9) && c < hi) hi = c;
+      }
+    }
+    const out = [];
+    if (lo > 0) out.push(lo);
+    if (isFinite(hi) && hi !== lo) out.push(hi);
+    return out;
+  }
+
+  function bands(v, s) {
+    const digits = s === "E96" ? 3 : 2;
+    const e = Math.floor(Math.log10(v) + 1e-9) - (digits - 1);
+    const sig = Math.round(v / Math.pow(10, e));
+    const ds = String(sig).padStart(digits, "0").split("").map(Number);
+    const multColor = e === -1 ? GOLD : e === -2 ? SILVER : BAND[e] || "#111111";
+    const tol = TOL[s];
+    let html = `<span class="rbody" aria-label="カラーコード" title="カラーコード ${rDisp(v, 3)}">`;
+    html += ds.map((d) => `<i style="background:${BAND[d]}"></i>`).join("");
+    html += `<i style="background:${multColor}"></i>`;
+    if (tol) html += `<i class="tol" style="background:${tol === "gold" ? GOLD : tol === "silver" ? SILVER : BAND[1]}"></i>`;
+    return html + "</span>";
+  }
+
+  function renderE() {
+    if (!state) return;
+    const { vin, r1, r2, vout } = state;
+    const s = $("series").value, card = $("ecard");
+    let best = null;
+    for (const a of neighbours(r1, s)) for (const b of neighbours(r2, s)) {
+      const v = vin * b / (a + b);
+      const err = Math.abs(v - vout);
+      if (!best || err < best.err - 1e-12) best = { a, b, v, err };
+    }
+    const same = Math.abs(best.a - r1) <= r1 * 1e-6 && Math.abs(best.b - r2) <= r2 * 1e-6;
+    const row = (n, v, ideal) => `<div class="erow"><span class="nm">${n}</span>
+      <span class="val">${rDisp(v, 3)}<small>${mode === "target" ? "理論値" : "現在値"} ${rDisp(ideal)}</small></span>${bands(v, s)}</div>`;
+    const diff = (best.v - vout) * 1000;
+    const diffStr = Math.abs(diff) < 0.05 ? "±0" : (diff > 0 ? "+" : "−") + num(Math.abs(diff), 3);
+    card.innerHTML = `<div class="ebox">
+      ${row("R1", best.a, r1)}${row("R2", best.b, r2)}
+      <div class="actual"><span class="lbl">この組み合わせで得られる出力電圧</span>
+        <span>${vDisp(best.v)}</span>
+        <span class="lbl">目標との差: ${diffStr} mV</span></div>
+      <button class="btn" id="apply" type="button" ${same ? "disabled" : ""}>${same ? "現在の R1・R2 は " + s + " 系列の値です" : "この値を R1・R2 に入れる"}</button>
+    </div>`;
+    if (!same) $("apply").addEventListener("click", () => {
+      $("r1").value = rStr(best.a, 3);
+      $("r2").value = rStr(best.b, 3);
+      recalc("r1");
+    });
+  }
+
+  IDS.forEach((id) => $(id).addEventListener("input", () => recalc(id)));
+  $("series").addEventListener("change", renderE);
+
+  setMode("target");
+  recalc("vout");
+})();
+</script>
+</body>
+</html>
