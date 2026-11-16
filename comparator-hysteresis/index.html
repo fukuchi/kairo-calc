@@ -139,7 +139,10 @@ tr:last-child td { border-bottom: 0; }
 .note { font-size: .82rem; color: var(--muted); margin: 0; }
 details { font-size: .9rem; }
 details summary { cursor: pointer; color: var(--muted); }
-.eq { font-family: var(--f-mono); font-size: .86rem; line-height: 1.9; margin-top: 8px; overflow-x: auto; white-space: nowrap; }
+.eq { margin-top: 8px; display: flex; flex-direction: column; gap: 10px; font-size: .88rem; }
+.eq .f { font-family: var(--f-mono); line-height: 1.8; overflow-x: auto; white-space: nowrap; padding: 8px 12px; background: var(--bg); border-radius: 4px; font-variant-numeric: tabular-nums; }
+.eq .f b { color: var(--accent); font-weight: 600; }
+.eq p { margin: 0; color: var(--muted); }
 .dim { opacity: .4; }
 a.btn { text-decoration: none; display: inline-block; }
 a.btn.disabled { opacity: .45; pointer-events: none; }
@@ -647,20 +650,52 @@ textarea.cj { width: 100%; min-height: 12em; font: .78rem/1.5 var(--f-mono); col
         ? "オープンドレインでは、出力 High のときプルアップ抵抗 Rp が R2 と直列に入るため、VTL の計算に Rp を含めています。High 時の出力端子電圧は R1・R2 に電流が流れる分だけ Vpu より下がります。"
         : "出力は VOH / VOL を理想的に出すものとして計算しています。") + sinkNote +
         "入力信号源の出力インピーダンスは R1 に加わるので、R1 に比べて十分小さいことを確認してください。";
-      $("eq").innerHTML = od
-        ? "VTH = Vref + (Vref − VOL) × R1 / R2<br>VTL = Vref − (Vpu − Vref) × R1 / (R2 + Rp)<br>ΔV = R1 × [ (Vref − VOL) / R2 + (Vpu − Vref) / (R2 + Rp) ]"
-        : "VTH = Vref + (Vref − VOL) × R1 / R2<br>VTL = Vref − (VOH − Vref) × R1 / R2<br>ΔV = (VOH − VOL) × R1 / R2";
     } else {
       const idiv = s.vcc / (s.ra + s.rb);
       $("note").textContent = "反転型では入力が − 端子に直接入るので、入力側にはほとんど電流が流れず、信号源のインピーダンスはしきい値に影響しません。出力の向きは入力と逆で、入力が VTH を超えると Low になります。基準を Vcc の分圧で作っているため、Vcc が変動するとしきい値も動きます。" +
         (od ? "オープンドレインでは、出力 High のとき Rp が Rf と直列に入るため、VTH の計算に Rp を含めています。" : "") + sinkNote +
         `分圧抵抗 Ra・Rb には約 ${iDisp(idiv)} が流れます。`;
-      $("eq").innerHTML = od
-        ? "VTH = (Vcc/Ra + Vpu/(Rf+Rp)) / (1/Ra + 1/Rb + 1/(Rf+Rp))<br>VTL = (Vcc/Ra + VOL/Rf) / (1/Ra + 1/Rb + 1/Rf)"
-        : "VTH = (Vcc/Ra + VOH/Rf) / (1/Ra + 1/Rb + 1/Rf)<br>VTL = (Vcc/Ra + VOL/Rf) / (1/Ra + 1/Rb + 1/Rf)";
     }
+    renderEq(s);
     drawPlot(s);
     renderE();
+  }
+
+  function renderEq(s) {
+    const v = (x) => num(Math.abs(x) < 5e-7 ? 0 : x, 4);
+    const R = (x) => rDisp(x, 4);
+    const od = s.t === "od", hi = s.hiName, ind = "&nbsp;&nbsp;";
+    const blk = (t, f) => `<div><p>${t}</p><div class="f">${f}</div></div>`;
+    let h = "";
+    if (s.topo === "ni") {
+      const a = s.vref - s.vl, b = s.vh - s.vref, rr = s.r2 + s.rh;
+      if (mode === "target") {
+        const src = spec === "vth"
+          ? ["VTH から R1 を求める", `R1 = (VTH − Vref) × R2 / (Vref − VOL)<br>${ind}= (${v(s.vth)} − ${v(s.vref)}) × ${R(s.r2)} / (${v(s.vref)} − ${v(s.vl)}) = <b>${R(s.r1)}</b>`]
+          : spec === "vtl"
+          ? ["VTL から R1 を求める", `R1 = (Vref − VTL) × ${od ? "(R2 + Rp)" : "R2"} / (${hi} − Vref)<br>${ind}= (${v(s.vref)} − ${v(s.vtl)}) × ${od ? `(${R(s.r2)} + ${R(s.rh)})` : R(s.r2)} / (${v(s.vh)} − ${v(s.vref)}) = <b>${R(s.r1)}</b>`]
+          : ["ヒステリシス幅から R1 を求める", `R1 = ΔV / [ (Vref − VOL) / R2 + (${hi} − Vref) / (R2${od ? " + Rp" : ""}) ]<br>${ind}= ${v(s.dv)} / [ ${v(a)} / ${R(s.r2)} + ${v(b)} / ${R(rr)} ] = <b>${R(s.r1)}</b>`];
+        h += blk(...src);
+      }
+      h += blk("上昇しきい値 VTH（出力 Low のとき。+ 端子が Vref に達する入力電圧）",
+        `VTH = Vref + (Vref − VOL) × R1 / R2<br>${ind}= ${v(s.vref)} + (${v(s.vref)} − ${v(s.vl)}) × ${R(s.r1)} / ${R(s.r2)} = <b>${v(s.vth)} V</b>`);
+      h += blk(`下降しきい値 VTL（出力 High のとき${od ? "。Rp が R2 と直列に入る" : ""}）`,
+        `VTL = Vref − (${hi} − Vref) × R1 / ${od ? "(R2 + Rp)" : "R2"}<br>${ind}= ${v(s.vref)} − (${v(s.vh)} − ${v(s.vref)}) × ${R(s.r1)} / ${od ? `(${R(s.r2)} + ${R(s.rh)})` : R(s.r2)} = <b>${v(s.vtl)} V</b>`);
+      h += blk("ヒステリシス幅", `ΔV = VTH − VTL = ${v(s.vth)} − ${v(s.vtl)} = <b>${v(s.dv)} V</b>`);
+    } else {
+      const rh = s.rf + s.rh;
+      if (mode === "target") {
+        h += blk("Ra・Rb は、+ 端子の電圧が VTH・VTL になる 2 本の式（節点の電流の和 = 0）を連立して求めます。"
+          , `VTH: (Vcc − VTH) / Ra = VTH / Rb + (VTH − ${hi}) / ${od ? "(Rf + Rp)" : "Rf"}<br>VTL: (Vcc − VTL) / Ra = VTL / Rb + (VTL − VOL) / Rf<br>${ind}→ Ra = <b>${R(s.ra)}</b>、Rb = <b>${R(s.rb)}</b>`);
+      }
+      h += blk(`上昇しきい値 VTH（出力 High のとき${od ? "。Rp が Rf と直列に入る" : ""}。+ 端子の電圧を重ね合わせで計算）`,
+        `VTH = (Vcc/Ra + ${hi}/${od ? "(Rf+Rp)" : "Rf"}) / (1/Ra + 1/Rb + 1/${od ? "(Rf+Rp)" : "Rf"})<br>${ind}= (${v(s.vcc)}/${R(s.ra)} + ${v(s.vh)}/${R(rh)}) / (1/${R(s.ra)} + 1/${R(s.rb)} + 1/${R(rh)})<br>${ind}= <b>${v(s.vth)} V</b>`);
+      h += blk("下降しきい値 VTL（出力 Low のとき）",
+        `VTL = (Vcc/Ra + VOL/Rf) / (1/Ra + 1/Rb + 1/Rf)<br>${ind}= (${v(s.vcc)}/${R(s.ra)} + ${v(s.vl)}/${R(s.rf)}) / (1/${R(s.ra)} + 1/${R(s.rb)} + 1/${R(s.rf)})<br>${ind}= <b>${v(s.vtl)} V</b>`);
+      h += blk("ヒステリシス幅", `ΔV = VTH − VTL = ${v(s.vth)} − ${v(s.vtl)} = <b>${v(s.dv)} V</b>`);
+    }
+    h += `<p>表示は丸めた値です。抵抗は Ω、電圧は V で計算しています。</p>`;
+    $("eq").innerHTML = h;
   }
 
   function drawPlot(s) {
