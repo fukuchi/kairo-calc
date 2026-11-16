@@ -4,11 +4,12 @@
 
 | ディレクトリ | ツール | 内容 |
 |---|---|---|
-| `voltage-divider/` | 可変抵抗分圧計算機 | 可変抵抗を2つの固定抵抗で挟む分圧回路。電圧範囲 ⇄ 固定抵抗の双方向計算、E系列への丸め、ワイパー位置スライダー、電流・消費電力 |
+| `variable-voltage-divider/` | 可変抵抗分圧計算機 | 可変抵抗を2つの固定抵抗で挟む分圧回路。電圧範囲 ⇄ 固定抵抗の双方向計算、E系列への丸め、ワイパー位置スライダー、電流・消費電力 |
+| `voltage-divider/` | 固定抵抗分圧計算機 | 可変抵抗を使わない R1・R2 の分圧回路。出力電圧・合計抵抗 ⇄ R1・R2 の双方向計算、E系列への丸め、電流・消費電力 |
 | `comparator-hysteresis/` | コンパレータヒステリシス計算機 | 反転型・非反転型、プッシュプル・オープンドレイン。しきい値 ⇄ 抵抗値の双方向計算、E系列への丸め、ヒステリシスループ、CircuitJS 用の回路の書き出し |
 | `led-resistor/` | LED電流制限抵抗計算機 | 色・電源電圧・明るさから抵抗値を計算、手持ちの抵抗から電流を逆算、明るさシミュレーション、計算式の表示 |
 
-トップの `index.html` が、3つのツールへのリンクを並べた親ページです。
+トップの `index.html` が、4つのツールへのリンクを並べた親ページです。
 
 ## ファイル構成
 
@@ -16,6 +17,7 @@
 .
 ├── index.html                    親ページ（ツール一覧）
 ├── .nojekyll                     GitHub Pages で Jekyll の処理を止める
+├── variable-voltage-divider/index.html
 ├── voltage-divider/index.html
 ├── comparator-hysteresis/index.html
 └── led-resistor/index.html
